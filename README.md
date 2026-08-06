@@ -12,6 +12,9 @@ server actions throughout.
 Sign up with any email to get your own workspace — accounts are isolated, and a
 fresh one starts with the full category catalogue ready to go.
 
+It is also an installable app. Open the link on any device and choose **Install**
+— see [Install as an app](#install-as-an-app) below.
+
 ---
 
 ## Quick start
@@ -119,6 +122,46 @@ letter jumps between pages.
 **Settings** — profile, currency (12 presets plus any ISO code `Intl` accepts),
 locale, date format, week start, password change, data export, clear-all-data, and
 account deletion.
+
+---
+
+## Install as an app
+
+FluxFin is a full PWA, so it installs from the URL with no app store, no
+download, and no separate codebase. Once installed it runs in its own window
+with its own icon — no tabs, no address bar.
+
+| Platform | How |
+| -------- | --- |
+| **Android** (Chrome, Edge, Samsung Internet) | Tap **Install** on the in-app banner, or ⋮ → *Install app* |
+| **iPhone / iPad** (Safari) | Share → **Add to Home Screen**. Safari has no install API, so the app shows these steps for you |
+| **Windows / macOS / Linux** (Chrome, Edge) | Click the install icon in the address bar, or **Settings → Install as an app** |
+
+You also get:
+
+- **Home-screen shortcuts** — long-press the icon to jump straight to *Add a
+  transaction*, *Transactions*, or *Analytics*
+- **An offline screen** instead of the browser's dinosaur when the connection
+  drops, which reloads itself the moment you are back online
+- **Update prompts** — a toast offers a reload when a new version ships, so an
+  installed window never sits on a stale build
+
+### What is deliberately *not* cached
+
+Transactions, balances, and every other page are never stored on the device.
+This is a finance app behind a login: a cached dashboard could show one
+person's balances to whoever opens the app next on a shared device, and a stale
+balance is worse than no balance. The service worker caches only the app shell,
+build assets, icons, and the offline page — see `public/sw.js`.
+
+### Native store builds
+
+If you specifically need a Play Store or App Store listing, the same codebase
+wraps with [Capacitor](https://capacitorjs.com) or a
+[Trusted Web Activity](https://developer.chrome.com/docs/android/trusted-web-activity/).
+That is a real undertaking though — signing keys, store review, a $25 one-off
+for Google and $99/year for Apple — and it buys little here, since a PWA already
+gets an icon, a standalone window, and offline handling.
 
 ---
 

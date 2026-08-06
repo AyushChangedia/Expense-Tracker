@@ -45,6 +45,7 @@ import { Field, FormError } from "@/components/auth/auth-card";
 import { PasswordInput, PasswordStrength } from "@/components/auth/password-input";
 import { SectionHeading } from "@/components/shared/page-header";
 import { ImportPanel } from "@/components/settings/import-panel";
+import { InstallButton } from "@/components/pwa/install-prompt";
 import { CURRENCIES, currencySymbol } from "@/lib/currency";
 import { DATE_FORMATS } from "@/lib/dates";
 import { changePassword } from "@/server/actions/auth";
@@ -97,8 +98,9 @@ export function SettingsView({ profile }: { profile: UserProfile }) {
         </TabsTrigger>
       </TabsList>
 
-      <TabsContent value="profile">
+      <TabsContent value="profile" className="space-y-4">
         <ProfileSection profile={profile} />
+        <InstallSection />
       </TabsContent>
 
       <TabsContent value="preferences">
@@ -234,6 +236,38 @@ function ProfileSection({ profile }: { profile: UserProfile }) {
           </Button>
         </div>
       </form>
+    </Panel>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Install as an app
+// ---------------------------------------------------------------------------
+
+function InstallSection() {
+  return (
+    <Panel
+      title="Install as an app"
+      description="Run FluxFin in its own window with a home-screen or task-bar icon — no browser tabs, no address bar."
+    >
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <ul className="space-y-1.5 text-sm text-muted-foreground">
+          <li className="flex items-center gap-2">
+            <span className="size-1 rounded-full bg-primary-300" />
+            Its own icon on your home screen or desktop
+          </li>
+          <li className="flex items-center gap-2">
+            <span className="size-1 rounded-full bg-primary-300" />
+            Full screen, with no browser chrome
+          </li>
+          <li className="flex items-center gap-2">
+            <span className="size-1 rounded-full bg-primary-300" />
+            Long-press the icon to jump straight to Add or Analytics
+          </li>
+        </ul>
+
+        <InstallButton />
+      </div>
     </Panel>
   );
 }

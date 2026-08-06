@@ -6,6 +6,7 @@ import {
   CommandPalette,
   GlobalShortcuts,
 } from "@/components/layout/command-palette";
+import { InstallBanner } from "@/components/pwa/install-prompt";
 import { PreferencesProvider } from "@/components/providers/preferences-provider";
 import { TransactionDialogProvider } from "@/components/providers/transaction-dialog-provider";
 import { requireUser } from "@/lib/session";
@@ -64,6 +65,7 @@ export default async function DashboardLayout({
         <MobileNav />
         <CommandPalette />
         <GlobalShortcuts />
+        <InstallBanner />
       </TransactionDialogProvider>
     </PreferencesProvider>
   );
