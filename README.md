@@ -181,12 +181,18 @@ src/
 
 **Neon + Vercel**
 
-1. Create a Neon project and copy the pooled connection string.
-2. Import the repo into Vercel and set `DATABASE_URL`, `AUTH_SECRET`, and
-   `AUTH_TRUST_HOST=true`. Add the Google variables only if you want OAuth.
-3. Vercel runs `npm run build`, which generates the Prisma client. Apply migrations
-   with `npx prisma migrate deploy` — either as a build step or once from your
-   machine against the production URL.
+1. Import the repo into Vercel.
+2. Add a Neon database from the Storage tab — it sets `DATABASE_URL` for you.
+   Use the **direct (unpooled)** connection string: this app opens few
+   connections, and migrations run cleanly without going through pgbouncer.
+3. Set `AUTH_SECRET` (`openssl rand -base64 32`) and `AUTH_TRUST_HOST=true`. Add
+   the Google variables only if you want OAuth.
+4. Deploy. `npm run build` runs `prisma generate && prisma migrate deploy && next
+   build`, so the schema is applied on every deploy — there is no separate
+   migration step.
+
+Seeding is optional and never runs automatically. To load the demo dataset, run
+`npm run db:seed` locally with `DATABASE_URL` pointed at the deployed database.
 
 For Google OAuth, add `https://your-domain/api/auth/callback/google` as an
 authorised redirect URI.
