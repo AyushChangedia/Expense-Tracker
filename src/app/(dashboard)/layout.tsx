@@ -56,7 +56,7 @@ export default async function DashboardLayout({
               unreadCount={unreadCount}
             />
 
-            <main className="flex-1 px-4 pb-28 pt-6 sm:px-6 lg:pb-10 lg:pt-8">
+            <main className="flex-1 px-gutter pb-[calc(7rem+env(safe-area-inset-bottom,0px))] pt-6 lg:pb-10 lg:pt-8">
               <div className="mx-auto w-full max-w-[1400px]">{children}</div>
             </main>
           </div>

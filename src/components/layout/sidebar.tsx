@@ -36,7 +36,7 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-white/[0.06] bg-surface/40 backdrop-blur-xl transition-[width] duration-500 ease-smooth lg:flex",
+        "sticky top-0 hidden h-dvh shrink-0 flex-col border-r border-white/[0.06] bg-surface/40 pt-safe backdrop-blur-xl transition-[width] duration-500 ease-smooth lg:flex",
         collapsed ? "w-[74px]" : "w-64",
       )}
     >

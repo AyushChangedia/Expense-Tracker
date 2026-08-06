@@ -220,6 +220,57 @@
 }
 
 @layer utilities {
+  /* ---------------------------------------------------------------------
+     Safe areas.
+
+     The app ships `viewport-fit=cover` with a translucent status bar, so an
+     installed PWA draws edge to edge — behind the notch, the status bar, and
+     the home indicator. Every element pinned to a screen edge has to pay the
+     corresponding inset back, or it ends up underneath system UI and becomes
+     untappable. The `0px` fallbacks make these no-ops in a browser tab.
+  --------------------------------------------------------------------- */
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  /*
+    The standard horizontal page gutter, widened on a device with a cutout.
+
+    `max()` rather than a bare inset, so the gutter never shrinks below the
+    design's own padding on a phone with no notch. The breakpoint is baked in
+    rather than exposed as a `sm:` variant — Tailwind does not emit
+    hand-written escaped variants like `.sm\:px-safe-6`, so that silently
+    produced no CSS at all.
+  */
+  .px-gutter {
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+
+  @media (min-width: 640px) {
+    .px-gutter {
+      padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+      padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+    }
+  }
+
+  /* Keeps a fixed element clear of the home indicator, on top of its own offset. */
+  .bottom-safe-20 {
+    bottom: calc(5rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-safe-24 {
+    bottom: calc(6rem + env(safe-area-inset-bottom, 0px));
+  }
+
+  .bottom-safe-38 {
+    bottom: calc(9.5rem + env(safe-area-inset-bottom, 0px));
+  }
+
   .text-balance {
     text-wrap: balance;
   }

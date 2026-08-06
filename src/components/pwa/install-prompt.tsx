@@ -205,7 +205,7 @@ export function InstallBanner() {
             exit={{ opacity: 0, y: 20, scale: 0.97 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
             // Sits above the mobile tab bar, out of the way of the FAB.
-            className="fixed inset-x-4 bottom-[152px] z-30 mx-auto max-w-sm lg:inset-x-auto lg:bottom-6 lg:right-6 lg:max-w-xs"
+            className="bottom-safe-38 fixed inset-x-4 z-30 mx-auto max-w-sm lg:inset-x-auto lg:bottom-6 lg:right-6 lg:max-w-xs"
           >
             <div className="glass glow-border flex items-start gap-3 p-4" data-active="true">
               <LogoMark className="mt-0.5 size-9 shrink-0" />

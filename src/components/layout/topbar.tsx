@@ -77,8 +77,13 @@ export function Topbar({
 
   return (
     <>
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-canvas/70 backdrop-blur-xl">
-        <div className="flex h-16 items-center gap-3 px-4 sm:px-6">
+      {/*
+        `pt-safe` pushes the controls clear of the status bar / notch. Without
+        it an installed PWA renders this row underneath system UI, which makes
+        the menu, search, and avatar impossible to tap.
+      */}
+      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-canvas/70 pt-safe backdrop-blur-xl">
+        <div className="flex h-16 items-center gap-3 px-gutter">
           <button
             type="button"
             onClick={() => setMobileNavOpen(true)}
@@ -208,7 +213,7 @@ export function Topbar({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-              className="fixed inset-y-0 left-0 z-50 flex w-[min(19rem,85vw)] flex-col border-r border-white/[0.08] bg-surface/95 backdrop-blur-2xl lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 flex w-[min(19rem,85vw)] flex-col border-r border-white/[0.08] bg-surface/95 pt-safe backdrop-blur-2xl lg:hidden"
               role="dialog"
               aria-label="Navigation"
             >
@@ -259,7 +264,7 @@ export function Topbar({
                 ))}
               </nav>
 
-              <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-white/[0.06] p-4">
+              <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-white/[0.06] p-4 pb-safe">
                 <Button
                   size="sm"
                   variant="secondary"

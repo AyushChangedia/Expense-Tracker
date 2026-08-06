@@ -432,7 +432,7 @@ export function TransactionsTable({ page }: { page: TransactionPage }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 24, scale: 0.96 }}
             transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/[0.10] bg-surface/95 px-4 py-3 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.95)] backdrop-blur-2xl lg:bottom-8"
+            className="bottom-safe-24 fixed left-1/2 z-40 flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-white/[0.10] bg-surface/95 px-4 py-3 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.95)] backdrop-blur-2xl lg:bottom-8"
           >
             <span className="tabular text-sm text-white">
               <span className="font-semibold">{selected.size}</span> selected

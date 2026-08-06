@@ -10,7 +10,9 @@ export default function AuthLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative flex min-h-dvh flex-col">
+    // `pt-safe` keeps the header clear of the status bar when the sign-in
+    // screen is opened from the installed app rather than a browser tab.
+    <div className="relative flex min-h-dvh flex-col pt-safe">
       <GradientBlobs variant="default" />
 
       <header className="container flex h-16 shrink-0 items-center justify-between">

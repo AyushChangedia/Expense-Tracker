@@ -28,15 +28,14 @@ export function MobileNav() {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ duration: 0.4, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
         whileTap={{ scale: 0.92 }}
-        className="fixed bottom-[84px] right-4 z-30 grid size-14 place-items-center rounded-2xl bg-brand-gradient shadow-[0_12px_36px_-8px_rgba(124,58,237,0.9)] lg:hidden"
+        className="bottom-safe-20 fixed right-4 z-30 grid size-14 place-items-center rounded-2xl bg-brand-gradient shadow-[0_12px_36px_-8px_rgba(124,58,237,0.9)] lg:hidden"
         aria-label="Add transaction"
       >
         <Plus className="size-6 text-white" strokeWidth={2.4} />
       </motion.button>
 
       <nav
-        className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.08] bg-canvas/85 backdrop-blur-2xl lg:hidden"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-white/[0.08] bg-canvas/85 pb-safe backdrop-blur-2xl lg:hidden"
         aria-label="Primary"
       >
         <ul className="grid grid-cols-5">
