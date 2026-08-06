@@ -1,12 +1,16 @@
+"use client";
+
 import * as React from "react";
 
 import { formatCurrency } from "@/lib/currency";
+import { usePreferences } from "@/components/providers/preferences-provider";
 import { cn } from "@/lib/utils";
 import type { TransactionType } from "@prisma/client";
 
 type AmountProps = {
   value: number;
   type?: TransactionType;
+  /** Overrides the signed-in user's currency. Rarely needed. */
   currency?: string;
   locale?: string;
   /** Colour by direction (green income / red expense). */
@@ -19,21 +23,32 @@ type AmountProps = {
 /**
  * Renders money with consistent sign, colour, and tabular figures so columns
  * of numbers stay aligned as values change.
+ *
+ * Currency and locale default to the signed-in user's preferences rather than
+ * to USD. Defaulting to a hardcoded currency meant every caller had to
+ * remember to pass it, and the ones that forgot silently rendered the wrong
+ * symbol — so the default is now the correct value, not a guess.
  */
 export function Amount({
   value,
   type,
-  currency = "USD",
-  locale = "en-US",
+  currency,
+  locale,
   colored = true,
   showSign = true,
   compact = false,
   className,
 }: AmountProps) {
+  const preferences = usePreferences();
+
   const isIncome = type === "INCOME";
   const isExpense = type === "EXPENSE";
 
-  const formatted = formatCurrency(Math.abs(value), { currency, locale, compact });
+  const formatted = formatCurrency(Math.abs(value), {
+    currency: currency ?? preferences.currency,
+    locale: locale ?? preferences.locale,
+    compact,
+  });
   const sign = showSign && type ? (isIncome ? "+" : "−") : value < 0 ? "−" : "";
 
   return (
@@ -65,9 +80,7 @@ export function DeltaBadge({
   className?: string;
 }) {
   if (value === null || !Number.isFinite(value)) {
-    return (
-      <span className={cn("text-xs text-subtle", className)}>No prior data</span>
-    );
+    return <span className={cn("text-xs text-subtle", className)}>No prior data</span>;
   }
 
   const rounded = Math.round(value * 10) / 10;

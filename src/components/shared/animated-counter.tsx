@@ -11,9 +11,11 @@ import {
 } from "framer-motion";
 
 import { formatCurrency } from "@/lib/currency";
+import { usePreferences } from "@/components/providers/preferences-provider";
 
 type AnimatedCounterProps = {
   value: number;
+  /** Overrides the signed-in user's currency. Rarely needed. */
   currency?: string;
   locale?: string;
   /** Render as plain number instead of currency. */
@@ -34,8 +36,8 @@ type AnimatedCounterProps = {
  */
 export function AnimatedCounter({
   value,
-  currency = "USD",
-  locale = "en-US",
+  currency,
+  locale,
   plain = false,
   suffix,
   prefix,
@@ -48,19 +50,30 @@ export function AnimatedCounter({
   const ref = React.useRef<HTMLSpanElement>(null);
   const inView = useInView(ref, { once: true, margin: "-40px" });
   const reduceMotion = useReducedMotion();
+  const preferences = usePreferences();
+
+  // Default to the signed-in user's settings rather than a hardcoded currency,
+  // so a caller that omits the prop renders the right symbol instead of USD.
+  const resolvedCurrency = currency ?? preferences.currency;
+  const resolvedLocale = locale ?? preferences.locale;
 
   const motionValue = useMotionValue(reduceMotion ? value : 0);
   const previous = React.useRef(0);
 
   const display = useTransform(motionValue, (latest) => {
     if (plain) {
-      const formatted = latest.toLocaleString(locale, {
+      const formatted = latest.toLocaleString(resolvedLocale, {
         minimumFractionDigits: decimals,
         maximumFractionDigits: decimals,
       });
       return `${prefix ?? ""}${formatted}${suffix ?? ""}`;
     }
-    return formatCurrency(latest, { currency, locale, signed, compact });
+    return formatCurrency(latest, {
+      currency: resolvedCurrency,
+      locale: resolvedLocale,
+      signed,
+      compact,
+    });
   });
 
   React.useEffect(() => {

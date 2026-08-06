@@ -10,13 +10,12 @@ import { ensureDefaultCategories } from "@/lib/bootstrap";
 
 declare module "next-auth" {
   interface Session {
-    user: {
-      id: string;
-      currency: string;
-      dateFormat: string;
-      locale: string;
-      weekStart: number;
-    } & DefaultSession["user"];
+    /**
+     * Only identity lives on the session. Preferences (currency, date format,
+     * locale, week start) are read from the database by `getSessionUser` —
+     * see the note there for why they must not be cached on the token.
+     */
+    user: { id: string } & DefaultSession["user"];
   }
 }
 
@@ -82,31 +81,21 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.sub = user.id;
       }
 
-      // Preferences live on the token so every server component can format
-      // money without an extra query. Re-read them when the client calls
-      // `useSession().update()` after a settings change.
-      if (token.sub && (user || trigger === "update" || token.currency === undefined)) {
+      // Only display identity is mirrored onto the token, and only when it
+      // could have changed. Everything the app formats with — currency, date
+      // format, locale, week start — is read from the database per request by
+      // `getSessionUser`, so a settings change takes effect immediately
+      // instead of waiting out the token's lifetime.
+      if (token.sub && (user || trigger === "update")) {
         const record = await prisma.user.findUnique({
           where: { id: token.sub },
-          select: {
-            name: true,
-            email: true,
-            image: true,
-            currency: true,
-            dateFormat: true,
-            locale: true,
-            weekStart: true,
-          },
+          select: { name: true, email: true, image: true },
         });
 
         if (record) {
           token.name = record.name;
           token.email = record.email;
           token.picture = record.image;
-          token.currency = record.currency;
-          token.dateFormat = record.dateFormat;
-          token.locale = record.locale;
-          token.weekStart = record.weekStart;
         }
       }
 
@@ -115,10 +104,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     async session({ session, token }) {
       if (token.sub) {
         session.user.id = token.sub;
-        session.user.currency = (token.currency as string) ?? "USD";
-        session.user.dateFormat = (token.dateFormat as string) ?? "MMM d, yyyy";
-        session.user.locale = (token.locale as string) ?? "en-US";
-        session.user.weekStart = (token.weekStart as number) ?? 0;
       }
       return session;
     },
