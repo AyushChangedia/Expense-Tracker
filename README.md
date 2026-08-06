@@ -7,6 +7,11 @@ against your own PostgreSQL database.
 Dark-only by design, built on Next.js 15 App Router with server components and
 server actions throughout.
 
+**Live demo → [expense-tracker-orcin-gamma-88.vercel.app](https://expense-tracker-orcin-gamma-88.vercel.app/)**
+
+Sign up with any email to get your own workspace — accounts are isolated, and a
+fresh one starts with the full category catalogue ready to go.
+
 ---
 
 ## Quick start
