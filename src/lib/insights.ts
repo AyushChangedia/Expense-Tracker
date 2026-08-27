@@ -258,18 +258,31 @@ export function buildInsights(context: InsightContext): Insight[] {
   // --- Goals --------------------------------------------------------------
 
   const activeGoals = goals.filter((goal) => goal.status === "ACTIVE");
+  // A goal is at risk when this month's saving does not cover what it needs.
+  // The `savings > 0` guard this replaces suppressed the warning exactly when
+  // it mattered most: a month that saved nothing, or ran a deficit, cleared
+  // the filter for every goal and the panel said nothing at all.
   const atRisk = activeGoals.filter(
-    (goal) =>
-      goal.requiredPerMonth !== null &&
-      summary.savings > 0 &&
-      goal.requiredPerMonth > summary.savings,
+    (goal) => goal.requiredPerMonth !== null && goal.requiredPerMonth > summary.savings,
   );
   if (atRisk.length > 0) {
-    const goal = atRisk[0];
+    // The widest shortfall first, rather than whichever goal happened to be
+    // returned first by the query.
+    const goal = [...atRisk].sort(
+      (a, b) => (b.requiredPerMonth ?? 0) - (a.requiredPerMonth ?? 0),
+    )[0];
+    const needed = goal.requiredPerMonth ?? 0;
+    const savedThisMonth =
+      summary.savings > 0
+        ? `you saved ${money(summary.savings)} this month`
+        : summary.savings === 0
+          ? "nothing was left over this month"
+          : `this month you were ${money(Math.abs(summary.savings))} short of breaking even`;
+
     insights.push({
       id: "goal-at-risk",
       title: `"${goal.name}" needs a bigger monthly push`,
-      detail: `Hitting the target on time takes ${money(goal.requiredPerMonth ?? 0)} a month, but you saved ${money(summary.savings)} this month.`,
+      detail: `Hitting the target on time takes ${money(needed)} a month, and ${savedThisMonth}.`,
       tone: "warning",
       icon: "Target",
       metric: `${Math.round(goal.percentComplete)}% funded`,
