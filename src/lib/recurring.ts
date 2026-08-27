@@ -44,6 +44,7 @@ export async function runDueRecurring(
       notes: true,
       frequency: true,
       interval: true,
+      startDate: true,
       endDate: true,
       nextRunDate: true,
     },
@@ -59,6 +60,11 @@ export async function runDueRecurring(
     let cursor = rule.nextRunDate;
     let lastRun: Date | null = null;
     let guard = 0;
+
+    // The rule's own start day, so a monthly rule due on the 31st keeps paying
+    // on the 31st. Stepping from the previous cursor instead lets February
+    // pull the whole sequence back to the 28th permanently.
+    const anchorDay = toUtcDay(rule.startDate).getUTCDate();
 
     while (
       cursor.getTime() <= today.getTime() &&
@@ -77,7 +83,9 @@ export async function runDueRecurring(
       });
 
       lastRun = cursor;
-      cursor = toUtcDay(advanceRecurrence(cursor, rule.frequency, rule.interval));
+      cursor = toUtcDay(
+        advanceRecurrence(cursor, rule.frequency, rule.interval, anchorDay),
+      );
       guard += 1;
     }
 
@@ -146,13 +154,15 @@ export function computeNextRunDate(
   let cursor = toUtcDay(startDate);
   let guard = 0;
 
+  const anchorDay = cursor.getUTCDate();
+
   // A start date in the future is itself the next run.
   if (cursor.getTime() >= today.getTime()) return cursor;
 
   // Otherwise walk forward — the backlog is posted by runDueRecurring, so the
   // rule keeps its original cadence rather than resetting to today.
   while (cursor.getTime() < today.getTime() && guard < MAX_OCCURRENCES_PER_RULE * 4) {
-    const next = toUtcDay(advanceRecurrence(cursor, frequency, interval));
+    const next = toUtcDay(advanceRecurrence(cursor, frequency, interval, anchorDay));
     if (next.getTime() > today.getTime()) break;
     cursor = next;
     guard += 1;

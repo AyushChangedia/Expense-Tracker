@@ -169,13 +169,23 @@ export function monthGrid(year: number, month: number, weekStartsOn: 0 | 1 = 0) 
 }
 
 /**
- * Advances a recurrence by one cycle. Month/year steps clamp to the end of
- * shorter months (date-fns `addMonths` handles Jan 31 -> Feb 28 correctly).
+ * Advances a recurrence by one cycle.
+ *
+ * `anchorDay` is the day-of-month the rule was created on, and month and year
+ * steps re-anchor to it. Without it a sequence walked one step at a time
+ * decays: `addMonths` clamps Jan 31 to Feb 28 correctly, but the next step
+ * starts from the 28th, so a rule due on the 31st pays on the 28th for the
+ * rest of its life. Clamping is only right when it applies to the original
+ * day each time, not to whatever the last clamp produced.
+ *
+ * Callers stepping through a sequence must pass it. Omitting it keeps the old
+ * single-step behaviour, which is correct for a one-off "what comes next".
  */
 export function advanceRecurrence(
   date: Date,
   frequency: RecurrenceFrequency,
   interval = 1,
+  anchorDay?: number,
 ): Date {
   const step = Math.max(1, interval);
   switch (frequency) {
@@ -183,13 +193,29 @@ export function advanceRecurrence(
       return addDays(date, step);
     case "WEEKLY":
       return addWeeks(date, step);
-    case "MONTHLY":
-      return addMonths(date, step);
     case "YEARLY":
-      return addYears(date, step);
+      return applyAnchorDay(addYears(date, step), anchorDay);
+    case "MONTHLY":
     default:
-      return addMonths(date, step);
+      return applyAnchorDay(addMonths(date, step), anchorDay);
   }
+}
+
+/** Re-seat a date on its anchor day, clamped to the length of its own month. */
+function applyAnchorDay(date: Date, anchorDay?: number): Date {
+  if (!anchorDay || anchorDay < 1) return date;
+  const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const target = Math.min(anchorDay, lastDay);
+  if (date.getDate() === target) return date;
+  return new Date(
+    date.getFullYear(),
+    date.getMonth(),
+    target,
+    date.getHours(),
+    date.getMinutes(),
+    date.getSeconds(),
+    date.getMilliseconds(),
+  );
 }
 
 export function frequencyLabel(
