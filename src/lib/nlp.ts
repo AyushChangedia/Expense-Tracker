@@ -96,8 +96,10 @@ function extractType(text: string): Extraction<TransactionType> {
 
 /**
  * Matches "$25", "25.50", "1,200", "12k", "30 dollars", "₹500", "eur 40".
- * Ordinals ("3rd") and bare years are excluded so dates are not mistaken for
- * money.
+ *
+ * The pattern itself is greedy about what counts as a number; the filtering of
+ * dates, ordinals and durations happens in extractAmount, where the
+ * surrounding words are available to judge by.
  */
 const AMOUNT_PATTERN = new RegExp(
   [
@@ -106,11 +108,35 @@ const AMOUNT_PATTERN = new RegExp(
     // Code-prefixed or suffixed: usd 40, 40 usd, 40 dollars, 40 bucks
     String.raw`(?:(?:usd|eur|gbp|inr|jpy|cad|aud|rs)\s?\d[\d,]*(?:\.\d{1,2})?\s?[km]?)`,
     String.raw`(?:\d[\d,]*(?:\.\d{1,2})?\s?[km]?\s?(?:usd|eur|gbp|inr|jpy|cad|aud|rs|dollars?|euros?|pounds?|rupees?|bucks))`,
-    // Bare number, not an ordinal and not a 4-digit year.
+    // Bare number. extractAmount decides whether it is money or a date.
     String.raw`(?:\b\d[\d,]*(?:\.\d{1,2})?\s?[km]?\b)`,
   ].join("|"),
   "gi",
 );
+
+const MONTH_ALTERNATION = MONTHS.join("|");
+
+/**
+ * Is this bare number part of a date rather than an amount?
+ *
+ * The test has to look at the surrounding text, not at the number. "2026" is
+ * a year in "march 3 2026" and 2026 rupees in "deposited 2026 cheque", and
+ * nothing about the digits themselves separates the two. Rejecting every
+ * 1900-2099 number outright — which is what this used to do — quietly threw
+ * away the amount on any transaction between 1,900 and 2,099, a range most
+ * people's rent sits in.
+ */
+function looksLikeDatePart(digits: string, text: string): boolean {
+  const beforeMonth = String.raw`\b${digits}\s*(?:st|nd|rd|th)?\s*(?:of\s+)?(?:${MONTH_ALTERNATION})\b`;
+  const afterMonth = String.raw`\b(?:${MONTH_ALTERNATION})\s+\d{1,2}(?:st|nd|rd|th)?,?\s*${digits}\b`;
+  const asDayOfMonth = String.raw`\b(?:${MONTH_ALTERNATION})\s+${digits}\b`;
+  // 3/4/2026 and 2026-03-04, from either side of the separator.
+  const inNumericDate = String.raw`\b${digits}\s*[/-]|[/-]\s*${digits}\b`;
+
+  return new RegExp(
+    [beforeMonth, afterMonth, asDayOfMonth, inNumericDate].join("|"),
+  ).test(text);
+}
 
 function extractAmount(text: string): Extraction<number | null> {
   const matches = Array.from(text.matchAll(AMOUNT_PATTERN)).map((m) => m[0]);
@@ -119,15 +145,15 @@ function extractAmount(text: string): Extraction<number | null> {
     const trimmed = raw.trim();
     const digitsOnly = trimmed.replace(/[^0-9]/g, "");
 
-    // Skip things that are clearly part of a date rather than an amount.
+    // Skip things that are clearly part of a date rather than an amount. Only
+    // bare numbers are ambiguous — "$2026" is unambiguously money.
     const isBare = !/[$€£₹¥]|usd|eur|gbp|inr|jpy|cad|aud|rs|dollar|euro|pound|rupee|buck/i.test(trimmed);
     if (isBare) {
-      if (/\b(19|20)\d{2}\b/.test(trimmed)) continue; // a year
       if (new RegExp(`${digitsOnly}\\s*(st|nd|rd|th)\\b`).test(text)) continue; // ordinal
       if (new RegExp(`${digitsOnly}\\s*(days?|weeks?|months?|years?|hours?)\\b`).test(text)) {
         continue; // "3 days ago"
       }
-      if (new RegExp(`\\b${digitsOnly}\\s*[/-]`).test(text)) continue; // 3/4/2026
+      if (looksLikeDatePart(digitsOnly, text)) continue;
     }
 
     const value = parseAmount(trimmed);
