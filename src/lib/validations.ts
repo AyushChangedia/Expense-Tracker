@@ -13,15 +13,32 @@ const hexColor = z
   .string()
   .regex(/^#([0-9a-fA-F]{6})$/, "Must be a 6-digit hex colour");
 
-/** Money: positive, at most 2 decimals, capped below the Decimal(14,2) limit. */
+/**
+ * Money: positive, at most 2 decimals, capped below the Decimal(14,2) limit.
+ *
+ * The decimal check cannot be `Number.isInteger(value * 100)`, because
+ * 12.34 * 100 is 1233.9999999999998 in binary floating point and half the
+ * valid amounts in the world would be rejected. It compares against the
+ * rounded value within a tolerance instead.
+ *
+ * It also cannot be `Number.isInteger(Math.round(value * 100))`, which is what
+ * it was: Math.round returns an integer by definition, so the refinement was
+ * always true and a third decimal place was never rejected at all.
+ */
+const CENT_TOLERANCE = 1e-6;
+
 export const amountSchema = z
   .number({ invalid_type_error: "Enter a valid amount" })
   .finite("Enter a valid amount")
   .positive("Amount must be greater than zero")
   .max(999_999_999.99, "That amount is too large")
-  .refine((value) => Number.isInteger(Math.round(value * 100)), {
-    message: "Amount can have at most 2 decimal places",
-  });
+  .refine(
+    (value) => {
+      const cents = value * 100;
+      return Math.abs(cents - Math.round(cents)) < CENT_TOLERANCE;
+    },
+    { message: "Amount can have at most 2 decimal places" },
+  );
 
 /** Accepts a Date, an ISO string, or `yyyy-MM-dd`. */
 export const dateSchema = z.union([z.date(), z.string().min(1)]).transform((value, ctx) => {
