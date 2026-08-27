@@ -175,3 +175,23 @@ test("a non-string input returns null", () => {
   assert.equal(parseAmount(undefined as unknown as string), null);
   assert.equal(parseAmount(42 as unknown as string), null);
 });
+
+test("maximumFractionDigits below the two-decimal default is honoured", () => {
+  // The default minimum is 2. Asking for 0 used to make Intl throw, and the
+  // fallback produced "$1234.57" — no grouping, and two decimals, which is
+  // the opposite of what the caller asked for.
+  assert.equal(formatCurrency(1234.567, { currency: "USD", maximumFractionDigits: 0 }), "$1,235");
+  assert.equal(formatCurrency(1234.567, { currency: "USD", maximumFractionDigits: 1 }), "$1,234.6");
+});
+
+test("a whole number keeps its decimals unless asked otherwise", () => {
+  assert.equal(formatCurrency(1200, { currency: "USD" }), "$1,200.00");
+  assert.equal(formatCurrency(1200, { currency: "USD", maximumFractionDigits: 0 }), "$1,200");
+});
+
+test("compact still overrides nothing the caller set explicitly", () => {
+  assert.equal(
+    formatCurrency(12_500, { currency: "USD", compact: true, maximumFractionDigits: 0 }),
+    "$13K",
+  );
+});
