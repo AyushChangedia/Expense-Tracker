@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { advanceRecurrence, toUtcDay } from "@/lib/dates";
+import { advanceRecurrence, utcDayOf } from "@/lib/dates";
 import { computeNextRunDate } from "@/lib/recurring";
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -21,7 +21,7 @@ function sequence(
   let cursor = start;
   const out = [iso(cursor)];
   for (let i = 0; i < steps; i += 1) {
-    cursor = toUtcDay(advanceRecurrence(cursor, frequency, interval, anchorDay));
+    cursor = advanceRecurrence(cursor, frequency, interval, anchorDay);
     out.push(iso(cursor));
   }
   return out;
@@ -160,4 +160,40 @@ test("the walk terminates on a daily rule started long ago", () => {
   // Guarded rather than unbounded: a daily rule from years back must not spin.
   const next = computeNextRunDate(utc(2019, 1, 1), "DAILY", 1, utc(2026, 8, 27));
   assert.ok(next.getTime() <= utc(2026, 8, 27).getTime());
+});
+
+/* -------------------------------------------------------------- timezones -- */
+
+test("utcDayOf is idempotent on a stored UTC day", () => {
+  const stored = utc(2026, 1, 15);
+  assert.equal(utcDayOf(stored).toISOString(), stored.toISOString());
+  assert.equal(utcDayOf(utcDayOf(stored)).toISOString(), stored.toISOString());
+});
+
+test("stepping a recurrence never depends on the server's timezone", () => {
+  // The whole schema stores calendar days at midnight UTC. Reading those back
+  // with local getters shifts them a day earlier anywhere west of Greenwich,
+  // so a recurring rule crept backwards one day on every run in a US-hosted
+  // deployment. Every date here is UTC in and UTC out.
+  const stepped = advanceRecurrence(utc(2026, 1, 15), "MONTHLY", 1, 15);
+  assert.equal(stepped.toISOString(), "2026-02-15T00:00:00.000Z");
+  assert.equal(stepped.getUTCHours(), 0, "a step must land exactly on midnight UTC");
+});
+
+test("every frequency lands on midnight UTC", () => {
+  const start = utc(2026, 1, 15);
+  for (const frequency of ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"] as const) {
+    const next = advanceRecurrence(start, frequency, 1, 15);
+    assert.equal(
+      next.getTime() % 86_400_000,
+      0,
+      `${frequency} produced a date that is not midnight UTC`,
+    );
+  }
+});
+
+test("a month step across a year boundary rolls the year", () => {
+  assert.equal(iso(advanceRecurrence(utc(2026, 11, 15), "MONTHLY", 2, 15)), "2027-01-15");
+  assert.equal(iso(advanceRecurrence(utc(2026, 12, 31), "MONTHLY", 1, 31)), "2027-01-31");
+  assert.equal(iso(advanceRecurrence(utc(2026, 1, 15), "MONTHLY", 24, 15)), "2028-01-15");
 });

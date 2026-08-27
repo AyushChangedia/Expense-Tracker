@@ -1,7 +1,7 @@
 import { format, getDaysInMonth, subDays } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
-import { lastNMonths, monthRange, toUtcDay, weekRange } from "@/lib/dates";
+import { lastNMonths, monthRange, toUtcDay, utcDayOf, weekRange } from "@/lib/dates";
 import { percentChange, round2 } from "@/lib/utils";
 import type {
   CategoryBreakdownItem,
@@ -71,10 +71,12 @@ export async function getSummary(
   );
 
   const today = toUtcDay(now);
-  const rolling30Start = toUtcDay(subDays(today, 29));
+  // `today` is already a UTC day, so these re-read it as one rather than
+  // reinterpreting it as a local date and losing a day west of Greenwich.
+  const rolling30Start = utcDayOf(subDays(today, 29));
   const rolling30End = new Date(today);
   rolling30End.setUTCDate(rolling30End.getUTCDate() + 1);
-  const previous30Start = toUtcDay(subDays(today, 59));
+  const previous30Start = utcDayOf(subDays(today, 59));
 
   const [currentTotals, previousTotals, lifetime, rolling, priorRolling, count] =
     await Promise.all([

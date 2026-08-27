@@ -10,6 +10,7 @@
     "lint": "eslint .",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "test:watch": "tsx --test --watch \"src/**/*.test.ts\"",
+    "test:tz": "for z in UTC America/New_York America/Los_Angeles Asia/Kolkata Pacific/Kiritimati; do echo \"TZ=$z\"; TZ=$z npm test --silent || exit 1; done",
     "typecheck": "tsc --noEmit",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
