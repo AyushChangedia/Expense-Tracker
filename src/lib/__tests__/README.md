@@ -42,3 +42,12 @@ component throws or renders visibly wrong. A subtly wrong `parseAmount` books
   — every function that needs "now" takes it as a parameter for exactly this
   reason, and a test that reads the system clock is a test that fails on the
   1st of some month a year from now.
+
+## Timezones
+
+`npm run test:tz` runs the whole suite in five zones on both sides of the
+meridian. This is not belt-and-braces: `toUtcDay` converts a *local* calendar
+date to midnight UTC, so applying it to a value that is already a stored UTC
+day walks the day backwards anywhere behind UTC, and the two cases are
+indistinguishable by type. A suite that only runs in UTC cannot see it. CI
+runs this target rather than plain `npm test`.

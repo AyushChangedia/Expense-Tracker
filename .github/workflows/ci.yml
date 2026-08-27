@@ -1,0 +1,59 @@
+# CI for FluxFin.
+#
+# Three checks, as separate steps, so a red tick says which one broke without
+# anyone opening the log:
+#
+#   typecheck   tsc --noEmit
+#   lint        eslint
+#   test        the unit suite, across five timezones
+#
+# `prisma generate` runs first and explicitly. The Prisma client is generated
+# into node_modules, so nothing that imports a model type compiles until it
+# exists — `npm ci` runs it via postinstall, but a cached node_modules or a
+# schema change without a reinstall leaves a stale client, and the failure
+# looks like a phantom type error on a field that is plainly in schema.prisma.
+
+name: CI
+
+on:
+  push:
+    branches: [claude/expense-tracker-saas-cjsdxl]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Generate the Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Every date in the schema is a calendar day stored at midnight UTC, and
+      # reading one back with local getters gives the wrong day west of
+      # Greenwich. A suite that only ever runs in UTC cannot catch that, so it
+      # runs on both sides of the meridian.
+      - name: Tests
+        run: npm run test:tz

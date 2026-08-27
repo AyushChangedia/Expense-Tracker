@@ -251,3 +251,13 @@ test("an unknown category returns null rather than guessing", () => {
   assert.equal(matchCategorySlug("Sorcery", available), null);
   assert.equal(matchCategorySlug("", available), null);
 });
+
+test("an imported date keeps its calendar day in any timezone", () => {
+  // parseDateInput returns local midnight; calling toISOString on that shifts
+  // the day backwards anywhere ahead of UTC, so a row dated the 4th imported
+  // as the 3rd in Kolkata. Checked here for every input shape.
+  for (const input of ["2026-03-04", "2026-03-04T00:00:00", "March 4, 2026", "03/04/2026"]) {
+    const { row } = normaliseRow({ date: input, description: "x", amount: "1" }, 2);
+    assert.equal(row?.date, "2026-03-04", `${input} produced ${row?.date}`);
+  }
+});

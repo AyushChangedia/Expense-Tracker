@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 
 import { parseAmount } from "@/lib/currency";
-import { parseDateInput } from "@/lib/dates";
+import { parseDateInput, toUtcDay } from "@/lib/dates";
 import { slugify } from "@/lib/utils";
 
 /**
@@ -213,7 +213,10 @@ export function normaliseRow(
   return {
     row: {
       rowNumber,
-      date: date.toISOString().slice(0, 10),
+      // toUtcDay first: parseDateInput returns local midnight, and calling
+      // toISOString on that shifts the day backwards anywhere *ahead* of UTC.
+      // A row dated 2026-03-04 imported in Kolkata became 2026-03-03.
+      date: toUtcDay(date).toISOString().slice(0, 10),
       type,
       amount,
       description,
