@@ -13,16 +13,50 @@ import type { TransactionType } from "@prisma/client";
  * works identically offline, in CI, and on a fresh clone.
  */
 
+/**
+ * Order matters twice over.
+ *
+ * Income is checked before expense so "was paid" wins over "paid". And within
+ * a list a longer marker must come before any marker it contains, because the
+ * match is a substring test and the matched text is then cut out of the
+ * description: with "refund" ahead of "refunded", typing "Refunded 50 from
+ * Amazon" removed the first six letters and left the description as
+ * "Ed Amazon". `assertLongestFirst` below makes that ordering a startup
+ * failure rather than something to notice in the UI months later.
+ */
 const INCOME_MARKERS = [
-  "earned", "received", "got paid", "was paid", "income", "salary", "paycheck",
-  "deposited", "refund", "refunded", "reimbursed", "cashback", "bonus", "sold",
-  "invoice paid", "client paid", "dividend", "credited",
+  "got paid", "was paid", "invoice paid", "client paid", "reimbursed",
+  "refunded", "refund", "deposited", "received", "credited", "cashback",
+  "paycheck", "dividend", "earned", "salary", "income", "bonus", "sold",
 ];
 
 const EXPENSE_MARKERS = [
-  "spent", "spend", "paid", "bought", "buy", "purchased", "cost", "expense",
-  "charged", "ordered", "booked", "subscribed", "renewed", "topped up", "withdrew",
+  "subscribed", "purchased", "topped up", "withdrew", "charged", "ordered",
+  "renewed", "expense", "booked", "bought", "spent", "spend", "paid", "cost",
+  "buy",
 ];
+
+/**
+ * Guards the invariant above: no marker may appear after one it contains.
+ *
+ * Cheap enough to run at module load, and it turns a silently mangled
+ * description into an error the first time anyone imports this file.
+ */
+function assertLongestFirst(markers: string[], label: string): void {
+  for (let i = 0; i < markers.length; i += 1) {
+    for (let j = i + 1; j < markers.length; j += 1) {
+      if (markers[j].includes(markers[i])) {
+        throw new Error(
+          `${label}: "${markers[j]}" contains "${markers[i]}" but is listed after it — ` +
+            `the shorter one would match first and leave the remainder in the description.`,
+        );
+      }
+    }
+  }
+}
+
+assertLongestFirst(INCOME_MARKERS, "INCOME_MARKERS");
+assertLongestFirst(EXPENSE_MARKERS, "EXPENSE_MARKERS");
 
 /** Words removed from the description once the meaning has been extracted. */
 const FILLER = new Set([
