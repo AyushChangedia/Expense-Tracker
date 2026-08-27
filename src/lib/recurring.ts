@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 
 import { prisma } from "@/lib/prisma";
-import { advanceRecurrence, toUtcDay } from "@/lib/dates";
+import { advanceRecurrence, toUtcDay, utcDayOf } from "@/lib/dates";
 
 /** Stops a badly-configured daily rule from generating thousands of rows. */
 const MAX_OCCURRENCES_PER_RULE = 260;
@@ -44,6 +44,7 @@ export async function runDueRecurring(
       notes: true,
       frequency: true,
       interval: true,
+      startDate: true,
       endDate: true,
       nextRunDate: true,
     },
@@ -60,6 +61,11 @@ export async function runDueRecurring(
     let lastRun: Date | null = null;
     let guard = 0;
 
+    // The rule's own start day, so a monthly rule due on the 31st keeps paying
+    // on the 31st. Stepping from the previous cursor instead lets February
+    // pull the whole sequence back to the 28th permanently.
+    const anchorDay = utcDayOf(rule.startDate).getUTCDate();
+
     while (
       cursor.getTime() <= today.getTime() &&
       guard < MAX_OCCURRENCES_PER_RULE &&
@@ -72,12 +78,12 @@ export async function runDueRecurring(
         amount: rule.amount,
         description: rule.description,
         notes: rule.notes,
-        date: toUtcDay(cursor),
+        date: utcDayOf(cursor),
         recurringId: rule.id,
       });
 
       lastRun = cursor;
-      cursor = toUtcDay(advanceRecurrence(cursor, rule.frequency, rule.interval));
+      cursor = advanceRecurrence(cursor, rule.frequency, rule.interval, anchorDay);
       guard += 1;
     }
 
@@ -133,8 +139,17 @@ export async function runDueRecurring(
 }
 
 /**
- * The first run date on or after `startDate`, used when a rule is created or
- * its schedule is edited.
+ * The date a rule should next post on, used when it is created or its schedule
+ * is edited.
+ *
+ * For a start date in the future, that is the start date itself. For one in
+ * the past it is the **most recent occurrence at or before today** — not,
+ * despite how the old wording read, the first occurrence on or after the
+ * start. A rule created today with a start date in January posts once and
+ * then continues monthly; it does not back-fill the eight months in between,
+ * which is what walking from the start date would do and is rarely what
+ * anyone means when they set an old start date on a rule they have only just
+ * created.
  */
 export function computeNextRunDate(
   startDate: Date,
@@ -143,16 +158,21 @@ export function computeNextRunDate(
   now = new Date(),
 ): Date {
   const today = toUtcDay(now);
-  let cursor = toUtcDay(startDate);
+  // startDate has already been through toUtcDay at the call site.
+  let cursor = utcDayOf(startDate);
   let guard = 0;
+
+  const anchorDay = cursor.getUTCDate();
 
   // A start date in the future is itself the next run.
   if (cursor.getTime() >= today.getTime()) return cursor;
 
-  // Otherwise walk forward — the backlog is posted by runDueRecurring, so the
-  // rule keeps its original cadence rather than resetting to today.
+  // Otherwise walk forward on the rule's own cadence and stop at the last
+  // occurrence that is not in the future, so the rule keeps its original
+  // phase — the 3rd of the month stays the 3rd — rather than resetting to
+  // today. runDueRecurring posts that occurrence on the next page load.
   while (cursor.getTime() < today.getTime() && guard < MAX_OCCURRENCES_PER_RULE * 4) {
-    const next = toUtcDay(advanceRecurrence(cursor, frequency, interval));
+    const next = advanceRecurrence(cursor, frequency, interval, anchorDay);
     if (next.getTime() > today.getTime()) break;
     cursor = next;
     guard += 1;

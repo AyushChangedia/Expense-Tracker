@@ -13,16 +13,50 @@ import type { TransactionType } from "@prisma/client";
  * works identically offline, in CI, and on a fresh clone.
  */
 
+/**
+ * Order matters twice over.
+ *
+ * Income is checked before expense so "was paid" wins over "paid". And within
+ * a list a longer marker must come before any marker it contains, because the
+ * match is a substring test and the matched text is then cut out of the
+ * description: with "refund" ahead of "refunded", typing "Refunded 50 from
+ * Amazon" removed the first six letters and left the description as
+ * "Ed Amazon". `assertLongestFirst` below makes that ordering a startup
+ * failure rather than something to notice in the UI months later.
+ */
 const INCOME_MARKERS = [
-  "earned", "received", "got paid", "was paid", "income", "salary", "paycheck",
-  "deposited", "refund", "refunded", "reimbursed", "cashback", "bonus", "sold",
-  "invoice paid", "client paid", "dividend", "credited",
+  "got paid", "was paid", "invoice paid", "client paid", "reimbursed",
+  "refunded", "refund", "deposited", "received", "credited", "cashback",
+  "paycheck", "dividend", "earned", "salary", "income", "bonus", "sold",
 ];
 
 const EXPENSE_MARKERS = [
-  "spent", "spend", "paid", "bought", "buy", "purchased", "cost", "expense",
-  "charged", "ordered", "booked", "subscribed", "renewed", "topped up", "withdrew",
+  "subscribed", "purchased", "topped up", "withdrew", "charged", "ordered",
+  "renewed", "expense", "booked", "bought", "spent", "spend", "paid", "cost",
+  "buy",
 ];
+
+/**
+ * Guards the invariant above: no marker may appear after one it contains.
+ *
+ * Cheap enough to run at module load, and it turns a silently mangled
+ * description into an error the first time anyone imports this file.
+ */
+function assertLongestFirst(markers: string[], label: string): void {
+  for (let i = 0; i < markers.length; i += 1) {
+    for (let j = i + 1; j < markers.length; j += 1) {
+      if (markers[j].includes(markers[i])) {
+        throw new Error(
+          `${label}: "${markers[j]}" contains "${markers[i]}" but is listed after it — ` +
+            `the shorter one would match first and leave the remainder in the description.`,
+        );
+      }
+    }
+  }
+}
+
+assertLongestFirst(INCOME_MARKERS, "INCOME_MARKERS");
+assertLongestFirst(EXPENSE_MARKERS, "EXPENSE_MARKERS");
 
 /** Words removed from the description once the meaning has been extracted. */
 const FILLER = new Set([
@@ -62,8 +96,10 @@ function extractType(text: string): Extraction<TransactionType> {
 
 /**
  * Matches "$25", "25.50", "1,200", "12k", "30 dollars", "₹500", "eur 40".
- * Ordinals ("3rd") and bare years are excluded so dates are not mistaken for
- * money.
+ *
+ * The pattern itself is greedy about what counts as a number; the filtering of
+ * dates, ordinals and durations happens in extractAmount, where the
+ * surrounding words are available to judge by.
  */
 const AMOUNT_PATTERN = new RegExp(
   [
@@ -72,11 +108,35 @@ const AMOUNT_PATTERN = new RegExp(
     // Code-prefixed or suffixed: usd 40, 40 usd, 40 dollars, 40 bucks
     String.raw`(?:(?:usd|eur|gbp|inr|jpy|cad|aud|rs)\s?\d[\d,]*(?:\.\d{1,2})?\s?[km]?)`,
     String.raw`(?:\d[\d,]*(?:\.\d{1,2})?\s?[km]?\s?(?:usd|eur|gbp|inr|jpy|cad|aud|rs|dollars?|euros?|pounds?|rupees?|bucks))`,
-    // Bare number, not an ordinal and not a 4-digit year.
+    // Bare number. extractAmount decides whether it is money or a date.
     String.raw`(?:\b\d[\d,]*(?:\.\d{1,2})?\s?[km]?\b)`,
   ].join("|"),
   "gi",
 );
+
+const MONTH_ALTERNATION = MONTHS.join("|");
+
+/**
+ * Is this bare number part of a date rather than an amount?
+ *
+ * The test has to look at the surrounding text, not at the number. "2026" is
+ * a year in "march 3 2026" and 2026 rupees in "deposited 2026 cheque", and
+ * nothing about the digits themselves separates the two. Rejecting every
+ * 1900-2099 number outright — which is what this used to do — quietly threw
+ * away the amount on any transaction between 1,900 and 2,099, a range most
+ * people's rent sits in.
+ */
+function looksLikeDatePart(digits: string, text: string): boolean {
+  const beforeMonth = String.raw`\b${digits}\s*(?:st|nd|rd|th)?\s*(?:of\s+)?(?:${MONTH_ALTERNATION})\b`;
+  const afterMonth = String.raw`\b(?:${MONTH_ALTERNATION})\s+\d{1,2}(?:st|nd|rd|th)?,?\s*${digits}\b`;
+  const asDayOfMonth = String.raw`\b(?:${MONTH_ALTERNATION})\s+${digits}\b`;
+  // 3/4/2026 and 2026-03-04, from either side of the separator.
+  const inNumericDate = String.raw`\b${digits}\s*[/-]|[/-]\s*${digits}\b`;
+
+  return new RegExp(
+    [beforeMonth, afterMonth, asDayOfMonth, inNumericDate].join("|"),
+  ).test(text);
+}
 
 function extractAmount(text: string): Extraction<number | null> {
   const matches = Array.from(text.matchAll(AMOUNT_PATTERN)).map((m) => m[0]);
@@ -85,15 +145,15 @@ function extractAmount(text: string): Extraction<number | null> {
     const trimmed = raw.trim();
     const digitsOnly = trimmed.replace(/[^0-9]/g, "");
 
-    // Skip things that are clearly part of a date rather than an amount.
+    // Skip things that are clearly part of a date rather than an amount. Only
+    // bare numbers are ambiguous — "$2026" is unambiguously money.
     const isBare = !/[$€£₹¥]|usd|eur|gbp|inr|jpy|cad|aud|rs|dollar|euro|pound|rupee|buck/i.test(trimmed);
     if (isBare) {
-      if (/\b(19|20)\d{2}\b/.test(trimmed)) continue; // a year
       if (new RegExp(`${digitsOnly}\\s*(st|nd|rd|th)\\b`).test(text)) continue; // ordinal
       if (new RegExp(`${digitsOnly}\\s*(days?|weeks?|months?|years?|hours?)\\b`).test(text)) {
         continue; // "3 days ago"
       }
-      if (new RegExp(`\\b${digitsOnly}\\s*[/-]`).test(text)) continue; // 3/4/2026
+      if (looksLikeDatePart(digitsOnly, text)) continue;
     }
 
     const value = parseAmount(trimmed);

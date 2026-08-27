@@ -1,8 +1,6 @@
 import {
   addDays,
   addMonths,
-  addWeeks,
-  addYears,
   eachDayOfInterval,
   endOfMonth,
   endOfWeek,
@@ -169,27 +167,91 @@ export function monthGrid(year: number, month: number, weekStartsOn: 0 | 1 = 0) 
 }
 
 /**
- * Advances a recurrence by one cycle. Month/year steps clamp to the end of
- * shorter months (date-fns `addMonths` handles Jan 31 -> Feb 28 correctly).
+ * Re-read a value that is already a stored UTC day as that same UTC day.
+ *
+ * `toUtcDay` converts a *local* calendar date to UTC midnight, so applying it
+ * to a value that is already UTC midnight walks the day backwards anywhere
+ * west of Greenwich: in New York, `new Date(Date.UTC(2026, 0, 15))` is 7pm on
+ * the 14th locally, and `toUtcDay` faithfully returns the 14th. The two cases
+ * are indistinguishable by type — both are a `Date` — so they need separate
+ * functions, and a value coming out of the database needs this one.
+ */
+export function utcDayOf(value: Date | string): Date {
+  const date = typeof value === "string" ? new Date(value) : value;
+  return new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 0, 0, 0, 0),
+  );
+}
+
+/** Days in the month a UTC-midnight date falls in. */
+function daysInUtcMonth(year: number, monthIndex: number): number {
+  return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+}
+
+/**
+ * Advances a recurrence by one cycle, in UTC.
+ *
+ * Recurrence cursors come from the database, where every date is a calendar
+ * day stored at midnight UTC, so the arithmetic is done on UTC components.
+ * date-fns `addMonths` and friends read *local* components, which is correct
+ * for a date the user picked in a calendar widget and wrong for one that came
+ * out of a column — and the difference only shows up in deployments west of
+ * Greenwich, where it moves every recurring rule a day earlier per run.
+ *
+ * `anchorDay` is the day-of-month the rule was created on, and month and year
+ * steps re-anchor to it. Without it a sequence walked one step at a time
+ * decays: clamping Jan 31 to Feb 28 is right, but the next step then starts
+ * from the 28th, so a rule due on the 31st pays on the 28th for the rest of
+ * its life. Clamping is only right when it applies to the original day each
+ * time, not to whatever the last clamp produced.
+ *
+ * Callers stepping through a sequence must pass it. Omitting it keeps the
+ * plain single-step clamp, which is correct for a one-off "what comes next".
  */
 export function advanceRecurrence(
   date: Date,
   frequency: RecurrenceFrequency,
   interval = 1,
+  anchorDay?: number,
 ): Date {
   const step = Math.max(1, interval);
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  const day = date.getUTCDate();
+
   switch (frequency) {
     case "DAILY":
-      return addDays(date, step);
+      return new Date(Date.UTC(year, month, day + step));
     case "WEEKLY":
-      return addWeeks(date, step);
-    case "MONTHLY":
-      return addMonths(date, step);
+      return new Date(Date.UTC(year, month, day + step * 7));
     case "YEARLY":
-      return addYears(date, step);
+      return utcMonthStep(year, month, day, step * 12, anchorDay);
+    case "MONTHLY":
     default:
-      return addMonths(date, step);
+      return utcMonthStep(year, month, day, step, anchorDay);
   }
+}
+
+/**
+ * Step whole months in UTC, landing on `anchorDay` (or the original day when
+ * there is no anchor), clamped to the length of the month it lands in.
+ */
+function utcMonthStep(
+  year: number,
+  month: number,
+  day: number,
+  months: number,
+  anchorDay?: number,
+): Date {
+  const targetMonth = month + months;
+  // Normalise so a month index outside 0-11 rolls the year over before the
+  // month length is measured.
+  const targetYear = year + Math.floor(targetMonth / 12);
+  const normalisedMonth = ((targetMonth % 12) + 12) % 12;
+
+  const wanted = anchorDay && anchorDay >= 1 ? anchorDay : day;
+  const clamped = Math.min(wanted, daysInUtcMonth(targetYear, normalisedMonth));
+  return new Date(Date.UTC(targetYear, normalisedMonth, clamped));
 }
 
 export function frequencyLabel(

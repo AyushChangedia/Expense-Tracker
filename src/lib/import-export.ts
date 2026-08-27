@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 
 import { parseAmount } from "@/lib/currency";
-import { parseDateInput } from "@/lib/dates";
+import { parseDateInput, toUtcDay } from "@/lib/dates";
 import { slugify } from "@/lib/utils";
 
 /**
@@ -83,31 +83,75 @@ function normaliseHeader(header: string): string {
   return HEADER_ALIASES[key] ?? key;
 }
 
+const INCOME_WORDS = [
+  "income", "credit", "cr", "in", "deposit", "earning", "earnings",
+  "received", "inflow", "+",
+];
+
+const EXPENSE_WORDS = [
+  "expense", "debit", "dr", "out", "withdrawal", "spending", "spend",
+  "payment", "outflow", "-",
+];
+
+/**
+ * Decide whether an imported row is money in or money out.
+ *
+ * The order is deliberate, strongest signal first:
+ *
+ *   1. an explicit type word, if we recognise it
+ *   2. separate debit / credit columns, which bank exports use instead
+ *   3. the sign of the amount
+ *
+ * Step 3 needs `signedFile`, because direction-by-sign is a property of the
+ * file rather than of the row. A positive 900 is income in a statement that
+ * writes -45.20 for a card payment, and an expense in a plain list of what
+ * somebody spent, where nothing is ever negative. One row cannot tell those
+ * apart, so the callers below look at every amount before mapping any of
+ * them, and an unsigned file still defaults to an expense.
+ */
 function coerceType(
   value: string | undefined,
   amount: number,
   debit?: string,
   credit?: string,
+  signedFile = false,
 ): "INCOME" | "EXPENSE" {
   const raw = (value ?? "").trim().toLowerCase();
 
-  if (["income", "credit", "in", "deposit", "earning", "+"].includes(raw)) return "INCOME";
-  if (["expense", "debit", "out", "withdrawal", "spending", "-"].includes(raw)) {
-    return "EXPENSE";
-  }
+  if (INCOME_WORDS.includes(raw)) return "INCOME";
+  if (EXPENSE_WORDS.includes(raw)) return "EXPENSE";
 
   // Bank exports often use separate debit/credit columns instead of a type.
-  if (credit && parseAmount(credit)) return "INCOME";
-  if (debit && parseAmount(debit)) return "EXPENSE";
+  if (credit && parseAmount(credit) !== null) return "INCOME";
+  if (debit && parseAmount(debit) !== null) return "EXPENSE";
 
-  // A negative amount is the near-universal convention for money leaving.
-  return amount < 0 ? "EXPENSE" : amount > 0 && raw === "" ? "EXPENSE" : "EXPENSE";
+  if (amount < 0) return "EXPENSE";
+  return signedFile ? "INCOME" : "EXPENSE";
+}
+
+/**
+ * Does this file use signs to mean direction?
+ *
+ * One negative amount anywhere is enough: a file that writes -45.20 for a card
+ * payment is using the convention, so its positive rows are money arriving.
+ */
+function usesSignedAmounts(records: Record<string, unknown>[]): boolean {
+  return records.some((record) => {
+    for (const [key, value] of Object.entries(record)) {
+      if (value === null || value === undefined) continue;
+      if (normaliseHeader(key) !== "amount") continue;
+      const parsed = parseAmount(String(value).trim());
+      if (parsed !== null && parsed < 0) return true;
+    }
+    return false;
+  });
 }
 
 /** Turns a loose record into a validated row, or explains why it cannot. */
 export function normaliseRow(
   record: Record<string, unknown>,
   rowNumber: number,
+  signedFile = false,
 ): { row?: ParsedImportRow; issue?: ImportIssue } {
   const mapped: Record<string, string> = {};
   for (const [key, value] of Object.entries(record)) {
@@ -118,7 +162,13 @@ export function normaliseRow(
   }
 
   const rawDescription = mapped.description ?? "";
-  const rawAmount = mapped.amount ?? mapped.debit ?? mapped.credit ?? "";
+  // First *non-empty* of the three, not first defined: a bank export has both
+  // a debit and a credit column on every row with one of them blank, and `??`
+  // stops at the empty string, so every credit row was read as having no
+  // amount at all and dropped with "Could not read the amount".
+  const rawAmount = [mapped.amount, mapped.debit, mapped.credit].find(
+    (value) => value !== undefined && value !== "",
+  ) ?? "";
   const rawDate = mapped.date ?? "";
 
   if (!rawDescription && !rawAmount && !rawDate) {
@@ -139,7 +189,13 @@ export function normaliseRow(
     return { issue: { rowNumber, message: `Could not read the amount "${rawAmount}"` } };
   }
 
-  const type = coerceType(mapped.type, parsedAmount, mapped.debit, mapped.credit);
+  const type = coerceType(
+    mapped.type,
+    parsedAmount,
+    mapped.debit,
+    mapped.credit,
+    signedFile,
+  );
   const amount = Math.round(Math.abs(parsedAmount) * 100) / 100;
 
   if (amount > 999_999_999.99) {
@@ -157,7 +213,10 @@ export function normaliseRow(
   return {
     row: {
       rowNumber,
-      date: date.toISOString().slice(0, 10),
+      // toUtcDay first: parseDateInput returns local midnight, and calling
+      // toISOString on that shifts the day backwards anywhere *ahead* of UTC.
+      // A row dated 2026-03-04 imported in Kolkata became 2026-03-03.
+      date: toUtcDay(date).toISOString().slice(0, 10),
       type,
       amount,
       description,
@@ -177,11 +236,12 @@ export function parseCsv(content: string): ImportParseResult {
 
   const rows: ParsedImportRow[] = [];
   const issues: ImportIssue[] = [];
+  const signedFile = usesSignedAmounts(parsed.data);
 
   parsed.data.forEach((record, index) => {
     // +2 accounts for the header row and 1-based numbering, so the number
     // matches what the user sees in a spreadsheet.
-    const { row, issue } = normaliseRow(record, index + 2);
+    const { row, issue } = normaliseRow(record, index + 2, signedFile);
     if (row) rows.push(row);
     if (issue) issues.push(issue);
   });
@@ -235,6 +295,9 @@ export function parseJson(content: string): ImportParseResult {
   const rows: ParsedImportRow[] = [];
   const issues: ImportIssue[] = [];
   const columns = new Set<string>();
+  const signedFile = usesSignedAmounts(
+    records.filter((r): r is Record<string, unknown> => typeof r === "object" && r !== null),
+  );
 
   records.forEach((record, index) => {
     if (typeof record !== "object" || record === null) {
@@ -243,7 +306,11 @@ export function parseJson(content: string): ImportParseResult {
     }
     for (const key of Object.keys(record)) columns.add(key);
 
-    const { row, issue } = normaliseRow(record as Record<string, unknown>, index + 1);
+    const { row, issue } = normaliseRow(
+      record as Record<string, unknown>,
+      index + 1,
+      signedFile,
+    );
     if (row) rows.push(row);
     if (issue) issues.push(issue);
   });

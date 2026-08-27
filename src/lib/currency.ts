@@ -67,15 +67,22 @@ export function formatCurrency(
   const safeValue = Number.isFinite(value) ? value : 0;
   const abs = Math.abs(safeValue);
 
+  const isCompact = compact && abs >= 10_000;
+  const maxDigits = maximumFractionDigits ?? (isCompact ? 1 : 2);
+  // Intl throws outright when the minimum exceeds the maximum, and the catch
+  // below turns that into an unseparated "$1234.57" — the caller asked for
+  // fewer decimals and silently got a worse-formatted number with more of
+  // them. The floor a caller asked for can never be above their own ceiling.
+  const minDigits = Math.min(isCompact ? 0 : 2, maxDigits);
+
   let formatted: string;
   try {
     formatted = new Intl.NumberFormat(locale, {
       style: "currency",
       currency,
-      notation: compact && abs >= 10_000 ? "compact" : "standard",
-      maximumFractionDigits:
-        maximumFractionDigits ?? (compact && abs >= 10_000 ? 1 : 2),
-      minimumFractionDigits: compact && abs >= 10_000 ? 0 : 2,
+      notation: isCompact ? "compact" : "standard",
+      maximumFractionDigits: maxDigits,
+      minimumFractionDigits: minDigits,
     }).format(abs);
   } catch {
     formatted = `${currencySymbol(currency)}${abs.toFixed(2)}`;
