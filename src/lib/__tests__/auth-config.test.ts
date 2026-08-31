@@ -5,6 +5,8 @@ import {
   AUTH_PAGE_PREFIXES,
   DEFAULT_SIGNED_IN_REDIRECT,
   PROTECTED_PREFIXES,
+  authConfig,
+  matchesPrefix,
   safeCallbackUrl,
 } from "@/lib/auth.config";
 
@@ -89,4 +91,113 @@ test("every prefix is an absolute path with no trailing slash", () => {
     assert.ok(prefix.startsWith("/"), prefix);
     assert.ok(prefix === "/" || !prefix.endsWith("/"), `${prefix} has a trailing slash`);
   }
+});
+
+/* ---------------------------------------------------- the prefix matcher -- */
+
+test("a prefix matches itself and its descendants", () => {
+  assert.ok(matchesPrefix("/settings", ["/settings"]));
+  assert.ok(matchesPrefix("/settings/profile", ["/settings"]));
+  assert.ok(matchesPrefix("/settings/profile/email", ["/settings"]));
+});
+
+test("a prefix does not match a route that merely starts with the same letters", () => {
+  // Plain startsWith gets this wrong, and wrongly protecting or wrongly
+  // exposing a route are both real outcomes of the same slip.
+  assert.ok(!matchesPrefix("/settings-export", ["/settings"]));
+  assert.ok(!matchesPrefix("/transactions-archive", ["/transactions"]));
+  assert.ok(!matchesPrefix("/logins", ["/login"]));
+});
+
+test("an unmatched path matches nothing", () => {
+  assert.ok(!matchesPrefix("/", PROTECTED_PREFIXES));
+  assert.ok(!matchesPrefix("/pricing", PROTECTED_PREFIXES));
+  assert.ok(!matchesPrefix("/", AUTH_PAGE_PREFIXES));
+});
+
+test("an empty prefix list matches nothing", () => {
+  assert.ok(!matchesPrefix("/dashboard", []));
+});
+
+/* ------------------------------------------------- the protection matrix -- */
+
+/** What the middleware and the authorized callback both decide from. */
+const decide = (pathname: string) => ({
+  protected: matchesPrefix(pathname, PROTECTED_PREFIXES),
+  authPage: matchesPrefix(pathname, AUTH_PAGE_PREFIXES),
+});
+
+test("app routes are protected and their sub-paths with them", () => {
+  for (const path of [
+    "/dashboard",
+    "/transactions",
+    "/transactions/abc123",
+    "/budgets",
+    "/goals",
+    "/recurring",
+    "/analytics",
+    "/calendar",
+    "/insights",
+    "/categories",
+    "/settings",
+    "/settings/profile",
+  ]) {
+    assert.equal(decide(path).protected, true, `${path} is not protected`);
+  }
+});
+
+test("the public surface stays public", () => {
+  // The marketing page and the auth screens must not require a session, or
+  // signing in becomes impossible.
+  for (const path of ["/", "/login", "/signup", "/forgot-password", "/reset-password"]) {
+    assert.equal(decide(path).protected, false, `${path} would require a session`);
+  }
+});
+
+test("auth screens are recognised so a signed-in user is bounced off them", () => {
+  for (const path of ["/login", "/signup", "/forgot-password", "/reset-password"]) {
+    assert.equal(decide(path).authPage, true, path);
+  }
+  assert.equal(decide("/dashboard").authPage, false);
+});
+
+test("no path is both protected and an auth page", () => {
+  // Such a path would redirect in a loop for one state or the other.
+  for (const path of [
+    "/",
+    "/login",
+    "/signup",
+    "/dashboard",
+    "/settings/profile",
+    "/nonsense",
+  ]) {
+    const result = decide(path);
+    assert.ok(!(result.protected && result.authPage), `${path} is in both sets`);
+  }
+});
+
+test("the authorized callback lets anyone reach a public route", () => {
+  const call = (pathname: string, signedIn: boolean) =>
+    authConfig.callbacks.authorized({
+      auth: signedIn ? ({ user: { id: "u1" } } as never) : null,
+      request: { nextUrl: { pathname } } as never,
+    } as never);
+
+  assert.equal(call("/", false), true);
+  assert.equal(call("/login", false), true);
+  assert.equal(call("/pricing", false), true);
+});
+
+test("the authorized callback gates protected routes on a session", () => {
+  const call = (pathname: string, signedIn: boolean) =>
+    authConfig.callbacks.authorized({
+      auth: signedIn ? ({ user: { id: "u1" } } as never) : null,
+      request: { nextUrl: { pathname } } as never,
+    } as never);
+
+  for (const path of PROTECTED_PREFIXES) {
+    assert.equal(call(path, false), false, `${path} allowed a signed-out visitor`);
+    assert.equal(call(path, true), true, `${path} blocked a signed-in user`);
+  }
+  assert.equal(call("/transactions/abc123", false), false, "a sub-path was left open");
 });

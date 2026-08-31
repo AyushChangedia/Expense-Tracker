@@ -67,6 +67,25 @@ export function safeCallbackUrl(
   return value;
 }
 
+/**
+ * Does `pathname` fall under one of `prefixes`?
+ *
+ * Exact match or a `/`-delimited descendant, so `/settings` covers
+ * `/settings/profile` but `/settings-export` is a different route and is not
+ * covered. Plain `startsWith` gets that wrong in the direction that matters:
+ * it would treat an unrelated route as protected, or — with the lists the
+ * other way round — bounce a signed-in user off a page they should see.
+ *
+ * Exported because the middleware and the `authorized` callback below both
+ * need it and had a copy each. Two implementations of one security check drift
+ * apart the first time somebody fixes only the one they were looking at.
+ */
+export function matchesPrefix(pathname: string, prefixes: readonly string[]): boolean {
+  return prefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
 export const googleEnabled = Boolean(
   process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET,
 );
@@ -104,13 +123,8 @@ export const authConfig = {
   callbacks: {
     authorized({ auth, request }) {
       const { pathname } = request.nextUrl;
-      const isSignedIn = Boolean(auth?.user);
-      const isProtected = PROTECTED_PREFIXES.some(
-        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-      );
-
-      if (isProtected) return isSignedIn;
-      return true;
+      if (!matchesPrefix(pathname, PROTECTED_PREFIXES)) return true;
+      return Boolean(auth?.user);
     },
   },
 } satisfies NextAuthConfig;
