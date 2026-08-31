@@ -15,13 +15,15 @@ import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
 import { PasswordInput, PasswordStrength } from "@/components/auth/password-input";
 import { registerUser, signInWithCredentials } from "@/server/actions/auth";
 import { signUpSchema } from "@/lib/validations";
+import { safeCallbackUrl } from "@/lib/auth.config";
 
 type FormValues = z.infer<typeof signUpSchema>;
 
 export function SignUpForm({ googleEnabled }: { googleEnabled: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  // Never navigate to a caller-supplied URL unchecked — see safeCallbackUrl.
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
 
   const [formError, setFormError] = React.useState<string | null>(null);
   const [pending, setPending] = React.useState(false);
