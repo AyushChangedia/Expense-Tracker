@@ -57,7 +57,19 @@ export function toNumber(
   return value.toNumber();
 }
 
-/** Money going *into* Prisma — keeps everything at 2dp. */
+/**
+ * Money going *into* Prisma — keeps everything at 2dp.
+ *
+ * Non-finite input is refused rather than converted. `NaN.toFixed(2)` is the
+ * string "NaN", and `new Prisma.Decimal("NaN")` is a perfectly valid Decimal
+ * that only fails at the point of the INSERT, as a driver error naming a
+ * column rather than the arithmetic that produced it. Infinity is the same
+ * story. Both mean a calculation went wrong upstream, and the useful place to
+ * find that out is here.
+ */
 export function toDecimal(value: number): Prisma.Decimal {
+  if (!Number.isFinite(value)) {
+    throw new TypeError(`Cannot store ${value} as a currency amount.`);
+  }
   return new Prisma.Decimal(value.toFixed(2));
 }
