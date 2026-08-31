@@ -39,17 +39,46 @@ export function fromUtcDay(value: Date | string): Date {
 }
 
 /**
- * Accepts "2026-03-04" (treated as a plain calendar day, never shifted) as
- * well as anything `Date` can parse.
+ * Parse a user-supplied date, or return null when it cannot be read.
+ *
+ * Use this anywhere the input might be wrong and the caller needs to say so —
+ * an imported file, a URL parameter. `parseDateInput` is the lenient wrapper
+ * for the UI, where falling back to today is the friendly answer.
+ *
+ * "2026-03-04" is treated as a plain calendar day and never shifted. Beyond
+ * that, `new Date()` is used but its results are checked: it happily accepts
+ * "2026-13-45" and rolls it forward to 14 February 2027, which is not a date
+ * anybody typed, so day-only strings are range-checked against the month they
+ * claim to be in.
  */
-export function parseDateInput(value: string): Date {
-  const isoDayOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+export function tryParseDateInput(value: string): Date | null {
+  const trimmed = String(value ?? "").trim();
+  if (!trimmed) return null;
+
+  const isoDayOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed);
   if (isoDayOnly) {
-    const [y, m, d] = value.split("-").map(Number);
+    const [, y, m, d] = isoDayOnly.map(Number);
+    if (m < 1 || m > 12) return null;
+    const lastDay = new Date(y, m, 0).getDate();
+    if (d < 1 || d > lastDay) return null;
     return new Date(y, m - 1, d);
   }
-  const parsed = value.includes("T") ? parseISO(value) : new Date(value);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+
+  const parsed = trimmed.includes("T") ? parseISO(trimmed) : new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+/**
+ * Accepts "2026-03-04" (treated as a plain calendar day, never shifted) as
+ * well as anything `Date` can parse, falling back to **today** when the value
+ * cannot be read.
+ *
+ * That fallback is right for a form field and wrong for a file: use
+ * `tryParseDateInput` wherever a bad value should be reported rather than
+ * quietly turned into now.
+ */
+export function parseDateInput(value: string): Date {
+  return tryParseDateInput(value) ?? new Date();
 }
 
 /** The `yyyy-MM-dd` key used by the calendar grid and chart buckets. */

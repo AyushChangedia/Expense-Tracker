@@ -183,11 +183,14 @@ src/
     <feature>/           # dashboard, transactions, budgets, goals, …
     providers/           # session, preferences, transaction dialog
   lib/                   # auth, prisma, dates, currency, nlp, insights, …
+    __tests__/           # the unit suite, plus its own README
   server/
     actions/             # mutations, "use server"
     queries/             # reads, called from server components
+      __tests__/
   hooks/
   types/
+.github/workflows/ci.yml # typecheck, lint, tests across five timezones
 ```
 
 ### Notes on the design
@@ -208,6 +211,54 @@ src/
 
 ---
 
+## Tests
+
+```bash
+npm test          # the unit suite
+npm run check     # typecheck, lint, then the suite
+```
+
+Nothing to install first. The suite runs on Node's built-in test runner through
+`tsx`, which was already a dev dependency for `prisma db seed`, so testing this
+project costs **no new packages** and `tsx` resolves the `@/*` alias exactly as
+Next does.
+
+**What is covered** is everything that is a pure function of its arguments:
+money parsing and formatting, the calendar-day helpers and recurrence
+arithmetic, the natural-language quick-add parser, CSV and JSON import and
+export, the insights engine, the Zod schemas, the filter-to-`where`
+translation, and the route-protection lists.
+
+**What is not**, deliberately:
+
+- **React components.** A DOM, a renderer and a testing library, to assert
+  things the type checker mostly already guarantees.
+- **Server actions and queries.** Thin wrappers over Prisma; testing them means
+  a live PostgreSQL, which belongs in an integration suite with a container
+  rather than in a unit run that has to stay fast enough to use.
+
+The rule of thumb is to test the code where a wrong answer is *silent*. A
+broken component throws or renders visibly wrong. A subtly wrong `parseAmount`
+books ₹1.23 instead of ₹1,234.50 and nobody notices until they reconcile.
+
+### Why the timezone matrix
+
+Every date here is a calendar day stored at midnight UTC. `toUtcDay` converts a
+*local* calendar date to that — correctly — but applying it to a value that is
+already a stored UTC day walks the day backwards anywhere behind Greenwich, and
+the two cases are indistinguishable by type, since both are a `Date`.
+
+A suite that only runs in UTC cannot see that class of bug, and every CI runner
+defaults to UTC while no user's server is one. So `npm run test:tz` runs
+everything in five zones on both sides of the meridian, and CI runs that target
+rather than plain `npm test`.
+
+`src/lib/__tests__/README.md` has the conventions, the most useful of which is
+that no test may read the system clock — every function needing "now" takes it
+as a parameter, so nothing starts failing on the 1st of some month next year.
+
+---
+
 ## Scripts
 
 | Command              | Purpose                              |
@@ -217,6 +268,10 @@ src/
 | `npm run start`      | Serve the production build           |
 | `npm run typecheck`  | `tsc --noEmit`                       |
 | `npm run lint`       | ESLint                               |
+| `npm test`           | Unit suite                           |
+| `npm run test:watch` | Unit suite, re-run on change         |
+| `npm run test:tz`    | The suite across five timezones      |
+| `npm run check`      | Typecheck, lint, then the suite      |
 | `npm run db:migrate` | Create and apply a migration         |
 | `npm run db:deploy`  | Apply migrations (production)        |
 | `npm run db:seed`    | Seed demo data                       |
@@ -244,6 +299,14 @@ Seeding is optional and never runs automatically. To load the demo dataset, run
 
 For Google OAuth, add `https://your-domain/api/auth/callback/google` as an
 authorised redirect URI.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` runs `prisma generate`, then typecheck, lint and
+`test:tz` as separate steps on every push and pull request — separate so a red
+tick says which one broke without opening the log. `prisma generate` is
+explicit because a stale client fails as a phantom type error on a field that
+is plainly there in `schema.prisma`.
 
 ---
 

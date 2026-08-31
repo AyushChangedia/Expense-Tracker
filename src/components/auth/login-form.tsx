@@ -15,6 +15,7 @@ import { AuthDivider, GoogleButton } from "@/components/auth/google-button";
 import { PasswordInput } from "@/components/auth/password-input";
 import { signInWithCredentials } from "@/server/actions/auth";
 import { signInSchema } from "@/lib/validations";
+import { safeCallbackUrl } from "@/lib/auth.config";
 
 type FormValues = z.infer<typeof signInSchema>;
 
@@ -32,7 +33,8 @@ export function LoginForm({ googleEnabled }: { googleEnabled: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const callbackUrl = searchParams.get("callbackUrl") ?? "/dashboard";
+  // Never navigate to a caller-supplied URL unchecked — see safeCallbackUrl.
+  const callbackUrl = safeCallbackUrl(searchParams.get("callbackUrl"));
   const registered = searchParams.get("registered") === "1";
   const reset = searchParams.get("reset") === "1";
   const oauthError = searchParams.get("error");

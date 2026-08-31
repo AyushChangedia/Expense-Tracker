@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 
 import { parseAmount } from "@/lib/currency";
-import { parseDateInput, toUtcDay } from "@/lib/dates";
+import { toUtcDay, tryParseDateInput } from "@/lib/dates";
 import { slugify } from "@/lib/utils";
 
 /**
@@ -158,7 +158,7 @@ export function normaliseRow(
     if (value === null || value === undefined) continue;
     const header = normaliseHeader(key);
     // Keep the first non-empty value when two columns map to the same field.
-    if (!mapped[header]) mapped[header] = String(value).trim();
+    if (!mapped[header]) mapped[header] = unmaskCsvCell(String(value).trim());
   }
 
   const rawDescription = mapped.description ?? "";
@@ -179,8 +179,10 @@ export function normaliseRow(
     return { issue: { rowNumber, message: "Missing a date" } };
   }
 
-  const date = parseDateInput(rawDate);
-  if (Number.isNaN(date.getTime())) {
+  // parseDateInput falls back to today, which made this check unreachable and
+  // silently dated every unreadable row to the moment of the import.
+  const date = tryParseDateInput(rawDate);
+  if (!date) {
     return { issue: { rowNumber, message: `Could not read the date "${rawDate}"` } };
   }
 
@@ -318,8 +320,47 @@ export function parseJson(content: string): ImportParseResult {
   return { rows, issues, detectedColumns: Array.from(columns) };
 }
 
+/**
+ * Characters that make a spreadsheet treat a cell as a formula.
+ *
+ * Excel, LibreOffice and Google Sheets all evaluate a cell beginning with one
+ * of these on open. A tab or carriage return counts because they are stripped
+ * before the leading character is examined.
+ */
+const FORMULA_TRIGGERS = ["=", "+", "-", "@", "\t", "\r"];
+
+/**
+ * Neutralise CSV formula injection (CWE-1236) in one exported cell.
+ *
+ * Descriptions and notes are free text, and in a finance app a good deal of it
+ * arrives from outside: an imported bank statement carries whatever the payer
+ * typed in the reference field. A description of
+ * `=HYPERLINK("http://evil","Click")` is inert in the app and a live link the
+ * moment the export is opened in a spreadsheet, which is the one thing an
+ * export is for.
+ *
+ * The guard is a leading apostrophe, which spreadsheets read as "treat the
+ * rest as text" and do not display. `unmaskCsvCell` reverses it on import, so
+ * the round trip this module promises still holds exactly.
+ */
+export function maskCsvCell(value: string): string {
+  if (!value) return value;
+  return FORMULA_TRIGGERS.includes(value[0]) ? `'${value}` : value;
+}
+
+/** Undo maskCsvCell, so an exported file re-imports to the same values. */
+export function unmaskCsvCell(value: string): string {
+  if (value.length < 2 || value[0] !== "'") return value;
+  return FORMULA_TRIGGERS.includes(value[1]) ? value.slice(1) : value;
+}
+
 export function toCsv(rows: ExportRow[]): string {
-  return Papa.unparse(rows, { columns: [...EXPORT_COLUMNS] });
+  const masked = rows.map((row) => {
+    const out = {} as ExportRow;
+    for (const column of EXPORT_COLUMNS) out[column] = maskCsvCell(row[column] ?? "");
+    return out;
+  });
+  return Papa.unparse(masked, { columns: [...EXPORT_COLUMNS] });
 }
 
 /** Matches an imported category name to an existing one, or falls back. */

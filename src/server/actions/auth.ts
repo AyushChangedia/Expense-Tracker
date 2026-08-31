@@ -19,6 +19,7 @@ import {
 import { notify } from "@/server/queries/activity";
 import { ActionError, parseInput, runAction } from "@/server/actions/helpers";
 import type { ActionResult } from "@/types";
+import { safeCallbackUrl } from "@/lib/auth.config";
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000; // one hour
 
@@ -122,7 +123,9 @@ export async function signInWithCredentials(
 
 export async function signInWithGoogle(callbackUrl = "/dashboard"): Promise<void> {
   // Throws a redirect on success — nothing after this line runs.
-  await signIn("google", { redirectTo: callbackUrl });
+  // A server action is callable with any argument, so the same guard the
+  // sign-in form applies has to hold here too.
+  await signIn("google", { redirectTo: safeCallbackUrl(callbackUrl) });
 }
 
 export async function signOutUser(): Promise<void> {

@@ -6,28 +6,23 @@ import {
   DEFAULT_SIGNED_IN_REDIRECT,
   PROTECTED_PREFIXES,
   authConfig,
+  matchesPrefix,
 } from "@/lib/auth.config";
 
 const { auth } = NextAuth(authConfig);
-
-function matches(pathname: string, prefixes: string[]): boolean {
-  return prefixes.some(
-    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-  );
-}
 
 export default auth((request) => {
   const { pathname, search } = request.nextUrl;
   const isSignedIn = Boolean(request.auth?.user);
 
   // Signed-in users have no business on the login or sign-up screens.
-  if (isSignedIn && matches(pathname, AUTH_PAGE_PREFIXES)) {
+  if (isSignedIn && matchesPrefix(pathname, AUTH_PAGE_PREFIXES)) {
     return NextResponse.redirect(new URL(DEFAULT_SIGNED_IN_REDIRECT, request.nextUrl));
   }
 
   // Only the app routes require a session. The marketing page, the auth pages,
   // and anything unmatched (which should render a 404) stay public.
-  if (!isSignedIn && matches(pathname, PROTECTED_PREFIXES)) {
+  if (!isSignedIn && matchesPrefix(pathname, PROTECTED_PREFIXES)) {
     const signInUrl = new URL("/login", request.nextUrl);
     signInUrl.searchParams.set("callbackUrl", `${pathname}${search}`);
     return NextResponse.redirect(signInUrl);
