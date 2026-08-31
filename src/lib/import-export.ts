@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 
 import { parseAmount } from "@/lib/currency";
-import { parseDateInput, toUtcDay } from "@/lib/dates";
+import { toUtcDay, tryParseDateInput } from "@/lib/dates";
 import { slugify } from "@/lib/utils";
 
 /**
@@ -179,8 +179,10 @@ export function normaliseRow(
     return { issue: { rowNumber, message: "Missing a date" } };
   }
 
-  const date = parseDateInput(rawDate);
-  if (Number.isNaN(date.getTime())) {
+  // parseDateInput falls back to today, which made this check unreachable and
+  // silently dated every unreadable row to the moment of the import.
+  const date = tryParseDateInput(rawDate);
+  if (!date) {
     return { issue: { rowNumber, message: `Could not read the date "${rawDate}"` } };
   }
 
