@@ -119,14 +119,29 @@ export const NAV_SECTIONS: NavSection[] = [
 
 export const NAV_ITEMS: NavItem[] = NAV_SECTIONS.flatMap((section) => section.items);
 
-/** The five destinations pinned to the mobile bottom bar. */
-export const MOBILE_NAV_ITEMS: NavItem[] = [
-  NAV_ITEMS[0], // Dashboard
-  NAV_ITEMS[3], // Transactions
-  NAV_ITEMS[4], // Budgets
-  NAV_ITEMS[1], // Analytics
-  NAV_ITEMS[7], // Calendar
-].filter(Boolean);
+/**
+ * The five destinations pinned to the mobile bottom bar, in bar order.
+ *
+ * Selected by href rather than by index into NAV_ITEMS. The indices were
+ * correct, but they encoded the order of a different list: adding one item to
+ * an earlier section, or reordering a section, silently re-points the mobile
+ * bar at whatever moved into those positions, and the only signal is a phone
+ * navigating somewhere unexpected. A missing href fails at module load
+ * instead.
+ */
+const MOBILE_NAV_HREFS = [
+  "/dashboard",
+  "/transactions",
+  "/budgets",
+  "/analytics",
+  "/calendar",
+] as const;
+
+export const MOBILE_NAV_ITEMS: NavItem[] = MOBILE_NAV_HREFS.map((href) => {
+  const item = NAV_ITEMS.find((navItem) => navItem.href === href);
+  if (!item) throw new Error(`MOBILE_NAV_HREFS names ${href}, which is not in NAV_SECTIONS.`);
+  return item;
+});
 
 /** Longest-prefix match so /transactions?page=2 still highlights Transactions. */
 export function isActivePath(pathname: string, href: string): boolean {
