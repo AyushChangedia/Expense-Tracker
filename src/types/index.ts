@@ -74,6 +74,8 @@ export type BudgetProgress = BudgetDTO & {
   projectedSpend: number;
 };
 
+import type { GoalPacing } from "@/lib/goal-math";
+
 export type GoalDTO = {
   id: string;
   name: string;
@@ -91,6 +93,8 @@ export type GoalDTO = {
   daysLeft: number | null;
   /** Monthly saving needed to hit the target by the deadline. */
   requiredPerMonth: number | null;
+  /** Funded, late, due today, or still running. */
+  pacing: GoalPacing;
   contributions: GoalContributionDTO[];
 };
 
