@@ -15,17 +15,27 @@ alias from `tsconfig.json` the same way Next does.
 
 Everything under `src/lib/` that is a pure function of its arguments: money
 formatting and parsing, the calendar-day helpers, the natural-language
-quick-add parser, CSV and JSON import normalisation, the insights engine, and
-the Zod schemas.
+quick-add parser, CSV and JSON import normalisation, the insights engine, the
+budget and goal arithmetic, and the Zod schemas.
+
+The last two are there on purpose. `getBudgetProgress` and `getGoals` are
+database queries, but the figures they derive — what is left to spend today,
+where the month is heading, what has to go in each month to hit a deadline —
+are arithmetic, and they were computed inline between two Prisma calls where
+nothing could reach them. They now live in `budget-math.ts` and `goal-math.ts`
+and the queries spread one result into the row they return. The pattern is
+worth repeating: **if a query derives a number, the deriving belongs in
+`src/lib/`.**
 
 Deliberately **not** tested here:
 
 - **React components.** They would need a DOM, a renderer and a testing
   library — three dependencies and a config file to assert things the type
   checker mostly already guarantees.
-- **Server actions and queries.** They are thin wrappers over Prisma; testing
-  them means a live PostgreSQL, which belongs in an integration suite with a
-  container, not in a unit run that has to stay fast enough to use.
+- **Server actions and queries.** What is left of them is `where` clauses,
+  `include`s and `Promise.all`; testing those means a live PostgreSQL, which
+  belongs in an integration suite with a container, not in a unit run that has
+  to stay fast enough to use.
 - **`runDueRecurring`.** It talks to the database. The scheduling arithmetic it
   depends on lives in `advanceRecurrence` and `computeNextRunDate`, and *that*
   is tested exhaustively — including the month-end cases that are the whole
@@ -35,9 +45,18 @@ The rule of thumb: test the code where a wrong answer is silent. A broken
 component throws or renders visibly wrong. A subtly wrong `parseAmount` books
 ₹1.23 instead of ₹1,234.50 and nobody notices until they reconcile.
 
+The daily allowance is the clearest example of why. It divided what was left by
+the days *after* today, so on the last day of the month it read zero while the
+line above it showed money remaining. Nothing failed. It just gave slightly bad
+advice, every month, on a figure people act on.
+
 ## Conventions
 
 - One file per module under test, named `<module>.test.ts`.
+- Assert a property where there is one. "The allowance only rises as the month
+  runs out" and "spent plus remaining is the budget" each catch a class of
+  arithmetic error that no single example would, and they read as the reason the
+  code exists rather than as a transcript of its output.
 - Dates are always passed in explicitly. No test may depend on the day it runs
   — every function that needs "now" takes it as a parameter for exactly this
   reason, and a test that reads the system clock is a test that fails on the
