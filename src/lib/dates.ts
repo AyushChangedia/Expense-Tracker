@@ -178,6 +178,26 @@ export function lastNMonths(count: number, reference = new Date()) {
   });
 }
 
+/**
+ * The bucket a stored date belongs to: "2026-3".
+ *
+ * Read in UTC, because every month boundary in this file is built in UTC —
+ * monthRange and lastNMonths both use Date.UTC. Reading the row locally instead
+ * would put a transaction stored at midnight on the 1st into the previous
+ * month's bucket for anyone west of Greenwich, and the totals would not add up
+ * to the month range they were fetched with.
+ *
+ * Unpadded, to match the keys the bucket lists are built with.
+ */
+export function monthKeyOf(date: Date): string {
+  return `${date.getUTCFullYear()}-${date.getUTCMonth() + 1}`;
+}
+
+/** The same key, from a year and a month already in hand. */
+export function monthKey(year: number, month: number): string {
+  return `${year}-${month}`;
+}
+
 export function weekRange(reference = new Date(), weekStartsOn: 0 | 1 = 0) {
   const start = startOfWeek(reference, { weekStartsOn });
   const end = endOfWeek(reference, { weekStartsOn });

@@ -169,10 +169,13 @@ export function GoalsView({ goals }: { goals: GoalDTO[] }) {
           <AnimatePresence initial={false}>
             {visible.map((goal, index) => {
               const Icon = getCategoryIcon(goal.icon);
-              const overdue =
-                goal.daysLeft !== null &&
-                goal.daysLeft < 0 &&
-                goal.status === "ACTIVE";
+              // The server works out the pacing; the card does not get a second
+              // opinion. Its own version checked the deadline and the status but
+              // not whether the goal was funded, so a goal that was finished
+              // late — money all saved, deadline long gone, still marked active
+              // — was flagged in red as overdue with nothing left to do about
+              // it.
+              const overdue = goal.pacing === "overdue" && goal.status === "ACTIVE";
 
               return (
                 <motion.article
@@ -222,9 +225,11 @@ export function GoalsView({ goals }: { goals: GoalDTO[] }) {
                             <CalendarClock className="size-3" />
                             {overdue
                               ? `${Math.abs(goal.daysLeft!)} days overdue`
-                              : goal.daysLeft !== null
-                                ? `${goal.daysLeft} days left`
-                                : formatDate(goal.deadline, dateFormat)}
+                              : goal.pacing === "due-today"
+                                ? "Due today"
+                                : goal.daysLeft !== null
+                                  ? `${goal.daysLeft} days left`
+                                  : formatDate(goal.deadline, dateFormat)}
                           </p>
                         ) : (
                           <p className="text-[11px] text-subtle">No deadline</p>

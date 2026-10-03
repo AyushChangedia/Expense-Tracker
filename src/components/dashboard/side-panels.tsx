@@ -184,7 +184,9 @@ export function GoalsPreview({ goals }: { goals: GoalDTO[] }) {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-white">{goal.name}</p>
                   <p className="text-[11px] text-subtle">
-                    {goal.requiredPerMonth !== null
+                    {goal.pacing === "overdue"
+                      ? `${formatMoney(goal.requiredPerMonth ?? 0)} still to save — deadline passed`
+                      : goal.requiredPerMonth !== null
                       ? `${formatMoney(goal.requiredPerMonth)}/month to finish on time`
                       : `${formatMoney(goal.remaining)} to go`}
                   </p>

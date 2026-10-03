@@ -1,12 +1,10 @@
 import { prisma } from "@/lib/prisma";
-import { monthRange } from "@/lib/dates";
+import { lastNMonths, monthKey, monthKeyOf, monthRange } from "@/lib/dates";
 import { round2 } from "@/lib/utils";
+import { standing } from "@/lib/budget-math";
 import { serialize } from "@/lib/serialize";
 import { monthProgress } from "@/server/queries/analytics";
 import type { BudgetProgress } from "@/types";
-
-/** Below this share of the budget a category is healthy; above it, warned. */
-const WARNING_THRESHOLD = 80;
 
 /**
  * Budgets for a month, each joined to what was actually spent against it.
@@ -67,7 +65,6 @@ export async function getBudgetProgress(
   );
 
   const { dayOfMonth, daysInMonth } = monthProgress(year, month, now);
-  const daysRemaining = Math.max(0, daysInMonth - dayOfMonth);
 
   return budgets.map((budget) => {
     const amount = Number(budget.amount);
@@ -78,21 +75,6 @@ export async function getBudgetProgress(
           count: overall._count._all,
         };
 
-    const spent = round2(usage.spent);
-    const remaining = round2(amount - spent);
-    const percentUsed = amount > 0 ? round2((spent / amount) * 100) : 0;
-
-    const status: BudgetProgress["status"] =
-      percentUsed >= 100 ? "exceeded" : percentUsed >= WARNING_THRESHOLD ? "warning" : "healthy";
-
-    // What is left, spread evenly across the days that remain.
-    const dailyAllowance =
-      daysRemaining > 0 ? round2(Math.max(0, remaining) / daysRemaining) : 0;
-
-    // Straight-line projection from the pace so far.
-    const projectedSpend =
-      dayOfMonth > 0 ? round2((spent / dayOfMonth) * daysInMonth) : spent;
-
     return {
       id: budget.id,
       categoryId: budget.categoryId,
@@ -100,13 +82,8 @@ export async function getBudgetProgress(
       month: budget.month,
       year: budget.year,
       category: budget.category ? serialize(budget.category) : null,
-      spent,
-      remaining,
-      percentUsed,
-      status,
       transactionCount: usage.count,
-      dailyAllowance,
-      projectedSpend,
+      ...standing(amount, usage.spent, dayOfMonth, daysInMonth),
     };
   });
 }
@@ -124,18 +101,14 @@ export async function getBudgetHistory(
     spent: number;
   }[] = [];
 
-  const cursor = new Date(reference.getFullYear(), reference.getMonth(), 1);
+  // lastNMonths is the one place that decides what "the last six months" means,
+  // and it already returns the UTC range for each. This used to build the same
+  // list by hand with its own cursor, which is a second answer to the same
+  // question waiting to drift from the first.
+  const windows = lastNMonths(months, reference);
 
-  const windows = Array.from({ length: months }, (_, index) => {
-    const date = new Date(cursor.getFullYear(), cursor.getMonth() - (months - 1 - index), 1);
-    return { year: date.getFullYear(), month: date.getMonth() + 1, date };
-  });
-
-  const earliest = monthRange(windows[0].year, windows[0].month).start;
-  const latest = monthRange(
-    windows[windows.length - 1].year,
-    windows[windows.length - 1].month,
-  ).end;
+  const earliest = windows[0].start;
+  const latest = windows[windows.length - 1].end;
 
   const [budgets, expenses] = await Promise.all([
     prisma.budget.findMany({
@@ -163,17 +136,14 @@ export async function getBudgetHistory(
       ? Number(overall.amount)
       : monthBudgets.reduce((acc, budget) => acc + Number(budget.amount), 0);
 
+    const key = monthKey(window.year, window.month);
     const spent = expenses
-      .filter(
-        (row) =>
-          row.date.getUTCFullYear() === window.year &&
-          row.date.getUTCMonth() + 1 === window.month,
-      )
+      .filter((row) => monthKeyOf(row.date) === key)
       .reduce((acc, row) => acc + Number(row.amount), 0);
 
     points.push({
-      key: `${window.year}-${String(window.month).padStart(2, "0")}`,
-      label: window.date.toLocaleDateString("en-US", { month: "short" }),
+      key,
+      label: window.label,
       budgeted: round2(budgeted),
       spent: round2(spent),
     });
