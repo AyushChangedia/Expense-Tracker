@@ -1,7 +1,15 @@
 import { format, getDaysInMonth, subDays } from "date-fns";
 
 import { prisma } from "@/lib/prisma";
-import { lastNMonths, monthRange, toUtcDay, utcDayOf, weekRange } from "@/lib/dates";
+import {
+  lastNMonths,
+  monthKey,
+  monthKeyOf,
+  monthRange,
+  toUtcDay,
+  utcDayOf,
+  weekRange,
+} from "@/lib/dates";
 import { percentChange, round2 } from "@/lib/utils";
 import type {
   CategoryBreakdownItem,
@@ -184,11 +192,11 @@ export async function getMonthlyTrend(
 
   const tally = new Map<string, { income: number; expenses: number }>();
   for (const bucket of buckets) {
-    tally.set(`${bucket.year}-${bucket.month}`, { income: 0, expenses: 0 });
+    tally.set(monthKey(bucket.year, bucket.month), { income: 0, expenses: 0 });
   }
 
   for (const row of rows) {
-    const key = `${row.date.getUTCFullYear()}-${row.date.getUTCMonth() + 1}`;
+    const key = monthKeyOf(row.date);
     const bucket = tally.get(key);
     if (!bucket) continue;
     const amount = Number(row.amount);
@@ -317,11 +325,11 @@ export async function getSavingsGrowth(
 
   const tally = new Map<string, number>();
   for (const bucket of buckets) {
-    tally.set(`${bucket.year}-${bucket.month}`, 0);
+    tally.set(monthKey(bucket.year, bucket.month), 0);
   }
 
   for (const row of rows) {
-    const key = `${row.date.getUTCFullYear()}-${row.date.getUTCMonth() + 1}`;
+    const key = monthKeyOf(row.date);
     if (!tally.has(key)) continue;
     tally.set(key, (tally.get(key) ?? 0) + Number(row.amount));
   }

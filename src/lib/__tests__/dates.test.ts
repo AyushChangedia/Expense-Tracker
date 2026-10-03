@@ -9,6 +9,8 @@ import {
   frequencyLabel,
   lastNMonths,
   monthGrid,
+  monthKey,
+  monthKeyOf,
   monthLabel,
   monthRange,
   parseDateInput,
@@ -230,4 +232,49 @@ test("frequency labels read naturally at interval 1 and above", () => {
   assert.equal(frequencyLabel("MONTHLY", 1), "Monthly");
   assert.equal(frequencyLabel("WEEKLY", 2), "Every 2 weeks");
   assert.equal(frequencyLabel("MONTHLY", 3), "Every 3 months");
+});
+
+/* --------------------------------------------------------- month keys -- */
+
+test("a stored date buckets by its UTC month", () => {
+  // Every month boundary in this file is built with Date.UTC — monthRange and
+  // lastNMonths both — so the key has to be read the same way, or a total does
+  // not add up to the range it was fetched with.
+  assert.equal(monthKeyOf(new Date("2026-03-15T12:00:00.000Z")), "2026-3");
+  assert.equal(monthKeyOf(new Date("2026-12-31T23:59:59.000Z")), "2026-12");
+});
+
+test("the first instant of a month belongs to that month", () => {
+  // Read locally, this is the previous month everywhere west of Greenwich.
+  assert.equal(monthKeyOf(new Date("2026-03-01T00:00:00.000Z")), "2026-3");
+});
+
+test("the last instant of a month does not spill into the next", () => {
+  // And read locally this is the next month everywhere east of it.
+  assert.equal(monthKeyOf(new Date("2026-02-28T23:59:59.999Z")), "2026-2");
+});
+
+test("the month is unpadded, matching the keys the buckets are built with", () => {
+  // "2026-3" and "2026-03" are different Map keys, and a mismatch silently
+  // buckets nothing: every month reads as zero rather than as an error.
+  assert.equal(monthKeyOf(new Date("2026-03-15T00:00:00.000Z")), "2026-3");
+  assert.equal(monthKey(2026, 3), "2026-3");
+});
+
+test("a key built from a date equals one built from its parts", () => {
+  for (const month of [1, 2, 6, 9, 10, 12]) {
+    const date = new Date(Date.UTC(2026, month - 1, 14));
+    assert.equal(monthKeyOf(date), monthKey(2026, month));
+  }
+});
+
+test("every bucket lastNMonths returns is keyed the way its range reads", () => {
+  // The pairing the trend charts rely on: a row inside a bucket's range must
+  // produce that bucket's key.
+  for (const bucket of lastNMonths(14, new Date("2026-02-10T00:00:00.000Z"))) {
+    const insideStart = bucket.start;
+    const insideEnd = new Date(bucket.end.getTime() - 1);
+    assert.equal(monthKeyOf(insideStart), monthKey(bucket.year, bucket.month));
+    assert.equal(monthKeyOf(insideEnd), monthKey(bucket.year, bucket.month));
+  }
 });

@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { monthRange } from "@/lib/dates";
+import { lastNMonths, monthKey, monthKeyOf, monthRange } from "@/lib/dates";
 import { round2 } from "@/lib/utils";
 import { standing } from "@/lib/budget-math";
 import { serialize } from "@/lib/serialize";
@@ -101,18 +101,14 @@ export async function getBudgetHistory(
     spent: number;
   }[] = [];
 
-  const cursor = new Date(reference.getFullYear(), reference.getMonth(), 1);
+  // lastNMonths is the one place that decides what "the last six months" means,
+  // and it already returns the UTC range for each. This used to build the same
+  // list by hand with its own cursor, which is a second answer to the same
+  // question waiting to drift from the first.
+  const windows = lastNMonths(months, reference);
 
-  const windows = Array.from({ length: months }, (_, index) => {
-    const date = new Date(cursor.getFullYear(), cursor.getMonth() - (months - 1 - index), 1);
-    return { year: date.getFullYear(), month: date.getMonth() + 1, date };
-  });
-
-  const earliest = monthRange(windows[0].year, windows[0].month).start;
-  const latest = monthRange(
-    windows[windows.length - 1].year,
-    windows[windows.length - 1].month,
-  ).end;
+  const earliest = windows[0].start;
+  const latest = windows[windows.length - 1].end;
 
   const [budgets, expenses] = await Promise.all([
     prisma.budget.findMany({
@@ -140,17 +136,14 @@ export async function getBudgetHistory(
       ? Number(overall.amount)
       : monthBudgets.reduce((acc, budget) => acc + Number(budget.amount), 0);
 
+    const key = monthKey(window.year, window.month);
     const spent = expenses
-      .filter(
-        (row) =>
-          row.date.getUTCFullYear() === window.year &&
-          row.date.getUTCMonth() + 1 === window.month,
-      )
+      .filter((row) => monthKeyOf(row.date) === key)
       .reduce((acc, row) => acc + Number(row.amount), 0);
 
     points.push({
-      key: `${window.year}-${String(window.month).padStart(2, "0")}`,
-      label: window.date.toLocaleDateString("en-US", { month: "short" }),
+      key,
+      label: window.label,
       budgeted: round2(budgeted),
       spent: round2(spent),
     });
