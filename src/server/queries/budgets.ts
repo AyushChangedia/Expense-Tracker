@@ -1,12 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { monthRange } from "@/lib/dates";
 import { round2 } from "@/lib/utils";
+import { standing } from "@/lib/budget-math";
 import { serialize } from "@/lib/serialize";
 import { monthProgress } from "@/server/queries/analytics";
 import type { BudgetProgress } from "@/types";
-
-/** Below this share of the budget a category is healthy; above it, warned. */
-const WARNING_THRESHOLD = 80;
 
 /**
  * Budgets for a month, each joined to what was actually spent against it.
@@ -67,7 +65,6 @@ export async function getBudgetProgress(
   );
 
   const { dayOfMonth, daysInMonth } = monthProgress(year, month, now);
-  const daysRemaining = Math.max(0, daysInMonth - dayOfMonth);
 
   return budgets.map((budget) => {
     const amount = Number(budget.amount);
@@ -78,21 +75,6 @@ export async function getBudgetProgress(
           count: overall._count._all,
         };
 
-    const spent = round2(usage.spent);
-    const remaining = round2(amount - spent);
-    const percentUsed = amount > 0 ? round2((spent / amount) * 100) : 0;
-
-    const status: BudgetProgress["status"] =
-      percentUsed >= 100 ? "exceeded" : percentUsed >= WARNING_THRESHOLD ? "warning" : "healthy";
-
-    // What is left, spread evenly across the days that remain.
-    const dailyAllowance =
-      daysRemaining > 0 ? round2(Math.max(0, remaining) / daysRemaining) : 0;
-
-    // Straight-line projection from the pace so far.
-    const projectedSpend =
-      dayOfMonth > 0 ? round2((spent / dayOfMonth) * daysInMonth) : spent;
-
     return {
       id: budget.id,
       categoryId: budget.categoryId,
@@ -100,13 +82,8 @@ export async function getBudgetProgress(
       month: budget.month,
       year: budget.year,
       category: budget.category ? serialize(budget.category) : null,
-      spent,
-      remaining,
-      percentUsed,
-      status,
       transactionCount: usage.count,
-      dailyAllowance,
-      projectedSpend,
+      ...standing(amount, usage.spent, dayOfMonth, daysInMonth),
     };
   });
 }
