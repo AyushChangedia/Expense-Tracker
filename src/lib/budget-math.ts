@@ -41,9 +41,17 @@ export function statusFor(percent: number): BudgetProgress["status"] {
   return "healthy";
 }
 
-/** How many days of the month are left to spend in. */
+/**
+ * How many days of the month are left to spend in, today included.
+ *
+ * Today counts. It was `daysInMonth - dayOfMonth`, which means on the last day
+ * of the month there are no days left — so the card told anyone who opened it
+ * on the 31st that they could spend nothing, while showing money remaining on
+ * the line above. One day earlier it was still wrong by half: the remainder
+ * spread over one day when there were two to get through.
+ */
 export function daysLeftInMonth(dayOfMonth: number, daysInMonth: number): number {
-  return Math.max(0, daysInMonth - dayOfMonth);
+  return Math.max(0, daysInMonth - dayOfMonth + 1);
 }
 
 /** What is left, spread evenly across the days that remain. */
